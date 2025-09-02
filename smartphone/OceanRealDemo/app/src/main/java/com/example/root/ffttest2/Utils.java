@@ -333,11 +333,19 @@ public class Utils {
     }
 
     public static String genName(Constants.SignalType sigType, int m_attempt) {
+        String userName = "unknown_user"; // Default value if Constants.user is null
+        if (Constants.user != null) {
+            userName = Constants.user.toString();
+        }
 //        return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt+"-"+Constants.ts;
         return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt;
     }
 
     public static String genName(Constants.SignalType sigType, int m_attempt, int chirpLoopNumber) {
+        String userName = "unknown_user"; // Default value if Constants.user is null
+        if (Constants.user != null) {
+            userName = Constants.user.toString();
+        }
 //        return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt+"-"+Constants.ts;
         return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt+"-"+chirpLoopNumber;
     }

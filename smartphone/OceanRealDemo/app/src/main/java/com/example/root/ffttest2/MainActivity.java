@@ -96,9 +96,33 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             startActivity(intent);
         }
 
-        ActivityCompat.requestPermissions(this,
-                perms,
-                1234);
+        //ActivityCompat.requestPermissions(this,
+        //        perms,
+        //        1234);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) { // M is API 23
+            boolean allPermissionsGranted = true;
+            for (java.lang.String perm : perms) {
+                if (androidx.core.content.ContextCompat.checkSelfPermission(this, perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    allPermissionsGranted = false;
+                    break;
+                }
+            }
+
+            if (!allPermissionsGranted) {
+                androidx.core.app.ActivityCompat.requestPermissions(this, perms, 1234);
+            } else {
+                // All permissions already granted (for API 23+)
+                // Initialize what you need now that permissions are confirmed
+                // Constants.user = Constants.User.Bob; // Example
+                startMethod(this); // Call the method that proceeds after permissions
+            }
+        } else {
+            // For API < 23 (i.e., 21 and 22 in your case, since minSdk is 21)
+            // Permissions are granted at install time if listed in the manifest.
+            // Proceed as if permissions are granted.
+            // Constants.user = Constants.User.Bob; // Example
+            startMethod(this); // Call the method that proceeds after permissions
+        }
         Constants.setup(this);
 
         Constants.tts = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
@@ -126,12 +150,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         if (requestCode == 1234) {
             boolean audioGranted=false;
-            boolean writeGranted=false;
-            for (int i = 0; i < permissions.length; i++) {
-                String permission = permissions[i];
-                int grantResult = grantResults[i];
+            boolean writeExternalGranted=false;
+            boolean readExternalGranted = false; // Added to track this permission
 
-                if (permission.equals(Manifest.permission.RECORD_AUDIO)) {
+            for (int i = 0; i < permissions.length; i++) {
+                //String permission = permissions[i];
+                //int grantResult = grantResults[i];
+
+                /*if (permission.equals(Manifest.permission.RECORD_AUDIO)) {
                     if (grantResult == PackageManager.PERMISSION_GRANTED) {
                         audioGranted=true;
                     } else {
@@ -148,7 +174,36 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
             if (audioGranted && writeGranted) {
                 Constants.user  = Constants.User.Bob;
+                startMethod(this);*/
+            //}
+                if (grantResults.length > i && grantResults[i] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    if (permissions[i].equals(Manifest.permission.RECORD_AUDIO)) {
+                        audioGranted = true;
+                    } else if (permissions[i].equals(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                        writeExternalGranted = true;
+                    } else if (permissions[i].equals(Manifest.permission.READ_EXTERNAL_STORAGE)) {
+                        readExternalGranted = true;
+                    }
+                } else {
+                    // A permission was denied
+                    android.util.Log.e("PermissionDenied", "Permission denied: " + permissions[i]);
+                    // DO NOT CALL requestPermissions() again here.
+                    // You can inform the user if you wish:
+                    // Toast.makeText(this, permissions[i] + " was denied.", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            // You had `String[] perms` defined in onCreate. It included READ_EXTERNAL_STORAGE.
+            // Ensure all *necessary* permissions for startMethod() are granted.
+            if (audioGranted && writeExternalGranted && readExternalGranted) {
+                // Constants.user = Constants.User.Bob; // Example
                 startMethod(this);
+            } else {
+                android.widget.Toast.makeText(this, "Not all required permissions were granted. Some features might not work.", android.widget.Toast.LENGTH_LONG).show();
+                // Consider what to do here:
+                // - Disable features that require the denied permissions.
+                // - Explain to the user why they are needed (e.g., via a dialog that takes them to app settings if they've chosen "don't ask again").
+                // - Or, if the app cannot function at all, you might even finish the activity.
             }
         }
     }
