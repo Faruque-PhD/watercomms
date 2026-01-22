@@ -347,7 +347,7 @@ public class Utils {
             userName = Constants.user.toString();
         }
 //        return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt+"-"+Constants.ts;
-        return Constants.user.toString()+"-"+sigType.toString()+"-"+m_attempt+"-"+chirpLoopNumber;
+        return userName+"-"+sigType.toString()+"-"+m_attempt+"-"+chirpLoopNumber;
     }
 
     public static String trimmed_ts() {
