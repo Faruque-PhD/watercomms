@@ -15,6 +15,7 @@ import android.media.AudioTrack;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
@@ -52,10 +53,17 @@ import com.jjoe64.graphview.GraphView;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Random;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
     String[] perms = new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
 
+    // --- START: Code for Automation and Logging ---
+    private Handler automationHandler = new Handler();
+    private boolean isAutomationRunning = false;
+    private Random random = new Random();
+    public static MainActivity activityInstance;
+    // --- END: Code for Automation and Logging ---
     private static SensorManager sensorManager;
     private Sensor accelerometer;
     private Sensor gyroscope;
@@ -64,12 +72,34 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState);// Inside onCreate()
+        //super.onCreate(savedInstanceState);
+        activityInstance = this; // Add this lineactivityInstance = this;
         setContentView(R.layout.activity_main);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         // Example of a call to a native method
-        uiSetup();
+        uiSetup();// --- START: Automation Mode Logic (Add at the end of uiSetup()) ---
+
+// A long-click on the top graph will start or stop the automated sending.
+        Constants.gview.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                isAutomationRunning = !isAutomationRunning; // Toggle the state
+
+                if (isAutomationRunning) {
+                    Toast.makeText(MainActivity.this, "Automation Mode STARTED", Toast.LENGTH_SHORT).show();
+                    // Immediately start the first run
+                    automationHandler.post(autoSendRunnable);
+                } else {
+                    Toast.makeText(MainActivity.this, "Automation Mode STOPPED", Toast.LENGTH_SHORT).show();
+                    // Stop any future scheduled runs
+                    automationHandler.removeCallbacks(autoSendRunnable);
+                }
+                return true; // Indicates the long-click was handled
+            }
+        });
+// --- END: Automation Mode Logic ---
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
@@ -1185,5 +1215,62 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     public static void unreg(Activity av) {
         sensorManager.unregisterListener((MainActivity)av);
     }
+
+    // --- START: Research Logging Method ---
+    /**
+     * Logs an event to a CSV file for research purposes.
+     * @param eventType "SEND" or "RECEIVE"
+     * @param signalId A unique name or ID for the signal (e.g., "Okay", "Help")
+     * @param metadata Extra info like volume or SNR.
+     */
+    public void logResearchEvent(String eventType, String signalId, String metadata) {
+        // Format: Timestamp,EventType,SignalID,Metadata
+        String timeStamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault()).format(new java.util.Date());
+        String logEntry = String.format("%s,%s,%s,%s\n", timeStamp, eventType, signalId, metadata);
+
+        try {
+            // This file path is safe for modern Android versions and requires no special permissions
+            java.io.File logFile = new java.io.File(getExternalFilesDir(null), "ocean_comm_logs.csv");
+            java.io.FileWriter writer = new java.io.FileWriter(logFile, true); // 'true' for appending
+            writer.append(logEntry);
+            writer.close();
+        } catch (java.io.IOException e) {
+            Log.e("ResearchLog", "Failed to write to CSV log file.", e);
+        }
+    }
+// --- END: Research Logging Method ---
+
+    // --- START: Runnable for Automation Loop ---
+    private final Runnable autoSendRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAutomationRunning) {
+                return; // Stop if automation has been turned off
+            }
+
+            // 1. Pick a random signal. There are 16 signals in your UI.
+            int randomSignalIndex = random.nextInt(16); // Generates a number from 0 to 15
+            String signalName = "SignalIndex_" + randomSignalIndex;
+
+            // 2. Log the SEND event to the CSV file.
+            logResearchEvent("SEND", signalName, "Volume:" + Constants.volume);
+
+            // 3. Trigger the signal transmission.
+            // This simulates a click on the corresponding hand signal view.
+            if (Constants.handSignalClickListener != null) {
+                View dummyView = new View(MainActivity.this);
+                // We use the view's tag to tell the listener which signal to send.
+                dummyView.setTag(randomSignalIndex);
+                Constants.handSignalClickListener.onClick(dummyView);
+            } else {
+                Log.e("Automation", "handSignalClickListener in Constants is null. Cannot send signal.");
+            }
+
+            // 4. Schedule the next run in 5 seconds (5000 milliseconds).
+            automationHandler.postDelayed(this, 5000);
+        }
+    };
+// --- END: Runnable for Automation Loop ---
+
 
 }

@@ -4,9 +4,11 @@ import static com.example.root.ffttest2.Constants.tv4;
 
 import android.app.Activity;
 import android.os.AsyncTask;
+import android.os.Handler;
 import android.util.Log;
 
 import java.util.Arrays;
+import java.util.Random;
 
 public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
     Activity av;
@@ -56,7 +58,13 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 }
             }
         });
-    }
+    }// --- START: Code for Automation and Logging ---
+
+    private Handler automationHandler = new Handler();
+    private boolean isAutomationRunning = false;
+    private Random random = new Random();
+    public static MainActivity activityInstance;
+// --- END: Code for Automation and Logging ---
 
     @Override
     protected void onPostExecute(Void unused) {
