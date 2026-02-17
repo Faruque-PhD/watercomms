@@ -719,6 +719,11 @@ public class Constants {
 
         Log.e(LOG, String.format("number of valid carriers %d %d [%d,%d]",
                 valid_carrier_default.length, subcarrier_number_default, f_seq.get(nbin1_default), f_seq.get(nbin2_default)));
+
+        //if (MainActivity.activityInstance != null) {
+            // Replace 'receivedID' with whatever variable holds the detected signal number
+        //    MainActivity.activityInstance.logResearchEvent("RECEIVE", "ID_", "Metadata:...");
+        //}
     }
 
     public static void updateNaiser(Context cxt) {

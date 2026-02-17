@@ -357,6 +357,9 @@ public class SymbolGeneration {
     public static short[] getCodedBits() {
         String uncoded = Utils.pad2(Integer.toBinaryString(Constants.messageID));
         String coded = "";
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logResearchEvent("RECEIVE_SUCCESS", "ID_" + Constants.messageID, "Decoded");
+        } // added for checking
         if (Constants.CODING) {
             coded = Utils.encode(uncoded, Constants.cc[0],Constants.cc[1],Constants.cc[2]);
         }

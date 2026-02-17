@@ -1058,6 +1058,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 }
             }
         });
+
+        iv1.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                isAutomationRunning = !isAutomationRunning;
+                if (isAutomationRunning) {
+                    Toast.makeText(MainActivity.this, "AUTOMATION START", Toast.LENGTH_SHORT).show();
+                    automationHandler.post(autoSendRunnable);
+                } else {
+                    Toast.makeText(MainActivity.this, "AUTOMATION STOP", Toast.LENGTH_SHORT).show();
+                    automationHandler.removeCallbacks(autoSendRunnable);
+                }
+                return true;
+            }
+        });
     }
 
     @Override
@@ -1233,6 +1248,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             java.io.File logFile = new java.io.File(getExternalFilesDir(null), "ocean_comm_logs.csv");
             java.io.FileWriter writer = new java.io.FileWriter(logFile, true); // 'true' for appending
             writer.append(logEntry);
+            writer.flush();
             writer.close();
         } catch (java.io.IOException e) {
             Log.e("ResearchLog", "Failed to write to CSV log file.", e);
@@ -1244,29 +1260,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final Runnable autoSendRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!isAutomationRunning) {
-                return; // Stop if automation has been turned off
-            }
+            if (!isAutomationRunning) return;
 
-            // 1. Pick a random signal. There are 16 signals in your UI.
-            int randomSignalIndex = random.nextInt(16); // Generates a number from 0 to 15
-            String signalName = "SignalIndex_" + randomSignalIndex;
+            // 1. Pick random signal (1 to 24, as per your iv1-iv24 setup)
+            int randomId = random.nextInt(24) + 1;
 
-            // 2. Log the SEND event to the CSV file.
-            logResearchEvent("SEND", signalName, "Volume:" + Constants.volume);
+            // 2. Log it
+            logResearchEvent("SEND", "ID_" + randomId, "Vol:" + Constants.volume);
 
-            // 3. Trigger the signal transmission.
-            // This simulates a click on the corresponding hand signal view.
-            if (Constants.handSignalClickListener != null) {
-                View dummyView = new View(MainActivity.this);
-                // We use the view's tag to tell the listener which signal to send.
-                dummyView.setTag(randomSignalIndex);
-                Constants.handSignalClickListener.onClick(dummyView);
-            } else {
-                Log.e("Automation", "handSignalClickListener in Constants is null. Cannot send signal.");
-            }
+            // 3. Trigger transmission (Matching your button logic)
+            Constants.messageID = randomId;
+            startWrapper();
 
-            // 4. Schedule the next run in 5 seconds (5000 milliseconds).
+            // 4. Repeat in 5 seconds
             automationHandler.postDelayed(this, 5000);
         }
     };

@@ -860,6 +860,10 @@ public class Utils {
 
                         long t1 = System.currentTimeMillis();
                         Utils.log(String.format("Listening... (%.2f)",xcorr_out[2]));
+                        if (MainActivity.activityInstance != null) {
+                            // Replace 'receivedID' with whatever variable holds the detected signal number
+                            MainActivity.activityInstance.logResearchEvent("RECEIVE_TRIGGER",  "Preamble", "Corr:" + xcorr_out[2]      /*"ID_", "Metadata:..."*/);
+                        }
 
                         sampleHistory.add(rec);
                         valueHistory.add(xcorr_out[0]);
