@@ -8,7 +8,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedList;
 
+/**
+ * Manages the encoding and decoding of the Feedback Signal.
+ * This signal conveys the optimal frequency range from Bob to Alice.
+ */
 public class FeedbackSignal {
+    /**
+     * Decodes the acoustic feedback signal on Alice's side to extract
+     * the optimal subcarriers for the data transmission.
+     */
     public static int[] extractSignalHelper(double[] rec, int start_point, int m_attempt) {
         double[] preamble = PreambleGen.preamble_d();
         int end_point = start_point+preamble.length-1;
@@ -71,6 +79,10 @@ public class FeedbackSignal {
         return out;
     }
 
+    /**
+     * Generates an acoustic signal representing the optimal frequency range [fbegin, fend].
+     * Sent by Bob to Alice during the Feedback phase.
+     */
     public static short[] encodeFeedbackSignal(int fbegin, int fend, int len_ms, boolean preamble, int m_attempt) {
         int len = (int)((len_ms/1000.0)*Constants.fs);
         if (preamble) {

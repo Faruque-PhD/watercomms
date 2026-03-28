@@ -5,7 +5,15 @@ import android.util.Log;
 
 import java.util.Arrays;
 
+/**
+ * Handles channel estimation on the receiver (Bob) side.
+ * Analyzes training OFDM symbols to determine the SNR of individual subcarriers.
+ */
 public class ChannelEstimate {
+    /**
+     * Estimates channel quality by calculating SNR for each subcarrier using the training symbols.
+     * Selects optimal frequency bins for the subsequent data transmission phase.
+     */
     public static int[] extractSignal_withsymbol_helper(Activity av, double[] rec, int start_point, int m_attempt) {
         int rx_preamble_start = start_point;
         rx_preamble_start+=240;

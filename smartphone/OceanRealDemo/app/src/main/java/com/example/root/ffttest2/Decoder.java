@@ -2,7 +2,16 @@ package com.example.root.ffttest2;
 
 import android.app.Activity;
 
+/**
+ * Responsible for decoding received OFDM data packets on the receiver (Bob).
+ * Implements equalization, differential BPSK demodulation, and Viterbi decoding.
+ */
 public class Decoder {
+    /**
+     * The main data decoding entry point.
+     * Takes a raw acoustic data signal, applies frequency-domain equalization
+     * using the training pilot symbols, demodulates bits, and performs Viterbi decoding.
+     */
     public static void decode_helper(Activity av, double[] data, int[] valid_bins) {
         data = Utils.filter(data);
 
