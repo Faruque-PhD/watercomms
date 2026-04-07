@@ -7,7 +7,14 @@ import android.util.Log;
 import java.util.Arrays;
 import java.util.Random;
 
+/**
+ * Core component for generating OFDM signals.
+ * Handles bit mapping, IFFT, cyclic prefix insertion, and differential encoding.
+ */
 public class SymbolGeneration {
+    /**
+     * Generates a Sounding signal with a preamble and training bits.
+     */
     public static short[] generatePreamble(short[] bits, int[] valid_carrier,
                                            int symreps, boolean preamble, Constants.SignalType sigType) {
         int numDataSyms = 0;
@@ -99,6 +106,10 @@ public class SymbolGeneration {
         return out;
     }
 
+    /**
+     * Generates a Data Packet containing a training symbol followed by data symbols.
+     * Implements bit interleaving, differential encoding, and subcarrier allocation.
+     */
     public static short[] generateDataSymbols(short[] bits, int[] valid_carrier,
                                               int symreps, boolean preamble, Constants.SignalType sigType,
                                               int m_attempt) {

@@ -10,6 +10,10 @@ import android.util.Log;
 import java.util.Arrays;
 import java.util.Random;
 
+/**
+ * Core protocol manager for the underwater acoustic communication handshake.
+ * Coordinates the multi-phase communication between Alice (Transmitter) and Bob (Receiver).
+ */
 public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
     Activity av;
     int num_measurements = 0;
@@ -150,12 +154,19 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         });
     }
 
+    /**
+     * Implements the core logic for the handshake protocol.
+     * Alice side: Sends sounding, waits for feedback, then sends data.
+     * Bob side: Waits for sounding, estimates channel, sends feedback, then receives data.
+     */
     public int work(int m_attempt) {
         double[] tx_preamble = PreambleGen.preamble_d();
         if (Constants.user.equals(Constants.User.Alice)) {
+            // ALICE PHASE 1: SOUNDING
             int chirpLoopNumber = 0;
             double[] feedback_signal = null;
             do {
+                // Generate and send a Sounding Signal (Preamble + Training symbols)
                 short[] sig = PreambleGen.sounding_signal_s();
                 FileOperations.writetofile(MainActivity.av, sig, Utils.genName(Constants.SignalType.Sounding, m_attempt) + ".txt");
 
@@ -166,6 +177,8 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 int sig_len = (int)(((double)sig.length/Constants.fs)*1000);
                 sleep(sig_len+Constants.SendPad);
 
+                // ALICE PHASE 2: WAIT FOR FEEDBACK
+                // Bob should respond with the optimal frequency range
                 feedback_signal = Utils.waitForChirp(Constants.SignalType.Feedback, m_attempt, chirpLoopNumber);
                 chirpLoopNumber++;
                 if (chirpLoopNumber >= 3 || !Constants.work) {
@@ -173,14 +186,17 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 }
             } while (feedback_signal == null);
 
+            // Synchronize and parse the feedback signal
             double[] seg = Utils.segment(feedback_signal,0,24000-1);
             double[] xcorr_out = Utils.xcorr_online(tx_preamble, seg);
 
             int[] valid_bins = FeedbackSignal.extractSignalHelper(feedback_signal, (int)xcorr_out[1], m_attempt);
 
+            // ALICE PHASE 3: DATA TRANSMISSION
             if (Constants.SEND_DATA) {
                 appendToLog(Constants.SignalType.Data.toString());
                 if (valid_bins.length >= 1 && valid_bins[0] != -1) {
+                    // Send message bits only on high-quality subcarriers
                     sendData(valid_bins, m_attempt);
                 }
                 try {
@@ -193,18 +209,22 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             return 0;
         }
         else if (Constants.user.equals(Constants.User.Bob)) {
+            // BOB PHASE 1: WAIT FOR SOUNDING
             int chirpLoopNumber = 0;
             int[] valid_bins = null;
             double[] sounding_signal = null;
             do {
+                // Listen for Alice's sounding signal
                 sounding_signal = Utils.waitForChirp(Constants.SignalType.Sounding, m_attempt, chirpLoopNumber);
                 if (sounding_signal == null) {
                     return -1;
                 }
 
+                // Detect preamble and synchronize
                 double[] seg = Utils.segment(sounding_signal,0,24000-1);
                 double[] xcorr_out = Utils.xcorr_online(tx_preamble, seg);
 
+                // Estimate channel quality (SNR) and pick best subcarriers
                 valid_bins = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int)xcorr_out[1], m_attempt);
                 chirpLoopNumber++;
 
@@ -213,6 +233,8 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 }
             } while (valid_bins == null || valid_bins.length == 0 || valid_bins[0] == -1);
 
+            // BOB PHASE 2: SEND FEEDBACK
+            // Encode the chosen optimal frequency range into an acoustic feedback signal
             short[] feedback = FeedbackSignal.encodeFeedbackSignal(valid_bins[0], valid_bins[valid_bins.length - 1],
                     Constants.fbackTime, true, m_attempt);
 
@@ -223,11 +245,14 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             int stime = (int) ((feedback.length / (double) Constants.fs) * 1000);
             sleep(stime+Constants.SendPad);
 
+            // BOB PHASE 3: RECEIVE DATA
             double[] data_signal = null;
             if (Constants.SEND_DATA) {
+                // Listen for Alice's data packet
                 data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0);
             }
             if (data_signal!=null) {
+                // Perform OFDM demodulation, equalization, and decoding
                 Decoder.decode_helper(av, data_signal, valid_bins);
             }
             return 0;
