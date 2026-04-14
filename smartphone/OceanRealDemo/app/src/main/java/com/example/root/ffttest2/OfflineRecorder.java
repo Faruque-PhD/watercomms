@@ -198,29 +198,33 @@ public class OfflineRecorder extends Thread {
                         save_FIFO.subList(0, remove_num).clear();
                         read_pointer -= remove_num;
                         Log.e("fifo","read pointer "+read_pointer);
-                        if(read_pointer < 0){
-                            read_pointer =0;
-                            Log.e("asdf","read too slow, some data lost");
+                        if (read_pointer < 0) {
+                            read_pointer = 0;
+                            Log.e("asdf", "read too slow, some data lost");
+                            if (MainActivity.activityInstance != null) {
+                                MainActivity.activityInstance.logPerf("BOB", "BUFFER_ERROR", "Data Lost: Read too slow");
+                            }
                         }
                         for (int i = 0; i < bytesread; i++) {
                             save_FIFO.add(temp[i]);
                         }
-                    }
-                    finally {
+                    } finally {
                         FIFO_lock.unlock();
                     }
-                }
-                else{
+                } else {
                     FIFO_lock.lock();
-                    try{
+                    try {
                         for (int i = 0; i < bytesread; i++) {
                             save_FIFO.add(temp[i]);
                         }
-                    }
-                    finally {
+                    } finally {
                         FIFO_lock.unlock();
                     }
-                    Log.e("fifo","size "+save_FIFO.size()+","+(save_FIFO.size()/48000.0)+","+write_pointer);
+                    // Log buffer occupancy occasionally (every ~1s worth of data)
+                    if (MainActivity.activityInstance != null && save_FIFO.size() % 48000 < bytesread) {
+                        MainActivity.activityInstance.logPerf("BOB", "BUFFER_STATUS", "Occupancy:" + save_FIFO.size() + " | Lag:" + (save_FIFO.size() - read_pointer));
+                    }
+                    Log.e("fifo", "size " + save_FIFO.size() + "," + (save_FIFO.size() / 48000.0) + "," + write_pointer);
                 }
                 Log.e("Monitor2------", String.valueOf(save_FIFO.size()) +"__" + String.valueOf(bytesread) +"__" + String.valueOf(write_pointer)+"__" + String.valueOf(read_pointer));
             }

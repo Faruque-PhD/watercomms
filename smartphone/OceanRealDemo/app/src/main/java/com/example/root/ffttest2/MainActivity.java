@@ -50,6 +50,8 @@ import androidx.core.widget.NestedScrollView;
 
 import com.jjoe64.graphview.GraphView;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Objects;
@@ -72,10 +74,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);// Inside onCreate()
-        //super.onCreate(savedInstanceState);
-        activityInstance = this; // Add this lineactivityInstance = this;
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        activityInstance = this;
+        //setContentView(R.layout.activity_main);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         // Example of a call to a native method
@@ -172,6 +174,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
 
         Log.e("asdf","oncreate end");
+    }
+
+    public void logPerf(String role, String event, String info) { //newly added
+        long time = System.currentTimeMillis();
+        String entry = time + "," + role + "," + event + "," + info + "\n";
+        try {
+            File file = new File(getExternalFilesDir(null), "performance_log.csv");
+            FileWriter fw = new FileWriter(file, true);
+            fw.write(entry);
+            fw.flush();
+            fw.close();
+        } catch (Exception e) {
+            Log.e("PERF", "Log failed", e);
+        }
     }
 
     @Override

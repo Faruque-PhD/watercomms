@@ -278,6 +278,7 @@ public class SymbolGeneration {
 
     // generate one symbol
     public static short[] generate_helper(short[] bits, int[] valid_carrier, int symreps, Constants.SignalType sigType) {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         int bound1=0;
         int bound2=0;
         int subnum=0;
@@ -342,6 +343,11 @@ public class SymbolGeneration {
             }
         }
 
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "ENCODE_LATENCY", "Modulation:" + (tEnd - tStart) + "ms | Type:" + sigType);
+        }
+
         return out;
     }
 
@@ -355,6 +361,7 @@ public class SymbolGeneration {
     }
 
     public static short[] getCodedBits() {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         String uncoded = Utils.pad2(Integer.toBinaryString(Constants.messageID));
         String coded = "";
         if (MainActivity.activityInstance != null) {
@@ -366,6 +373,12 @@ public class SymbolGeneration {
         else {
             coded = uncoded;
         }
+
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "ENCODE_LATENCY", "FEC_Encoding:" + (tEnd - tStart) + "ms");
+        }
+
         Utils.log(uncoded +"=>"+coded+"=>"+Constants.mmap.get(Constants.messageID));
         return Utils.convert(coded);
     }

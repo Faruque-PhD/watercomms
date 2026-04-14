@@ -19,6 +19,7 @@ import java.util.Scanner;
 
 public class FileOperations {
     public static double[] readrawasset(Context context, int id, int normalizer) {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         Scanner inp = new Scanner(context.getResources().openRawResource(id));
         LinkedList<Double> ll = new LinkedList<>();
         while (inp.hasNextLine()) {
@@ -31,6 +32,11 @@ public class FileOperations {
             ar[counter++] = d;
         }
         ll.clear();
+
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("SYSTEM", "IO_LATENCY", "ReadAsset_ID:" + id + " | Time:" + (tEnd - tStart) + "ms");
+        }
 
         return ar;
     }
@@ -62,6 +68,7 @@ public class FileOperations {
     }
 
     public static double[] readfromfile(Activity av, String dd, String filename) {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         LinkedList<Double> ll = new LinkedList<Double>();
 
         try {
@@ -85,10 +92,17 @@ public class FileOperations {
             ar[counter++] = d;
         }
         ll.clear();
+
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("SYSTEM", "IO_LATENCY", "ReadFile:" + filename + " | Time:" + (tEnd - tStart) + "ms");
+        }
+
         return ar;
     }
 
     public static void writetofile(String _ExternalFilesDir, short[] buff, String filename) {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         Constants.writing=true;
         Log.e(LOG,"writetofile " + _ExternalFilesDir + "," + filename + " "+(buff==null));
         long ts = System.currentTimeMillis();
@@ -116,6 +130,11 @@ public class FileOperations {
                 filename.contains("Bob")&&filename.contains("Data")&&filename.contains("bottom")||
                 filename.contains("Alice")&&filename.contains("Feedback")&&filename.contains("bottom")) {
             Utils.log("finish writing " + filename);
+        }
+
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("SYSTEM", "IO_LATENCY", "WriteFile:" + filename + " | Time:" + (tEnd - tStart) + "ms");
         }
     }
 

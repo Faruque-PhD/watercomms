@@ -3,19 +3,31 @@ package com.example.root.ffttest2;
 import static com.example.root.ffttest2.Constants.tv4;
 
 import android.app.Activity;
+import android.icu.number.NumberRangeFormatter;
 import android.os.AsyncTask;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.util.Log;
 
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Random;
 
 public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
+    private static int globalAttemptCounter = 0; //ID
+    private static int m_attempt = 0;
     Activity av;
     int num_measurements = 0;
     public SendChirpAsyncTask(Activity activity, int num_measurements) {
         this.av = activity;
         this.num_measurements = num_measurements;
+    }
+
+    public static String getSyncTag() {
+        long bootTime = SystemClock.elapsedRealtime();
+        String humanTime = new SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(new Date());
+        return "[" + humanTime + " | Ref:" + bootTime + "]";
     }
 
     @Override
@@ -104,6 +116,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         Constants.StartingTimestamp = System.currentTimeMillis();
         appendToLog(Constants.SignalType.Start.toString());
 
+        globalAttemptCounter++;
+        m_attempt++;
+
         if (Constants.user.equals(Constants.User.Alice)) {
             FileOperations.writetofile(MainActivity.av, Constants.FLIP_SYMBOL + "",
                     Utils.genName(Constants.SignalType.FlipSyms, 0) + ".txt");
@@ -152,82 +167,160 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
     public int work(int m_attempt) {
         double[] tx_preamble = PreambleGen.preamble_d();
+        //String signalName = (Constants.mmap != null) ? Constants.mmap.get(Constants.messageID) : "Unknown";
+
         if (Constants.user.equals(Constants.User.Alice)) {
             int chirpLoopNumber = 0;
             double[] feedback_signal = null;
-            do {
+            /*do {
                 short[] sig = PreambleGen.sounding_signal_s();
                 FileOperations.writetofile(MainActivity.av, sig, Utils.genName(Constants.SignalType.Sounding, m_attempt) + ".txt");
 
+                // --- ALICE PREAMBLE LOGGING ---
+                long bootTime = SystemClock.elapsedRealtime();
+                String humanTs = new SimpleDateFormat("HH:mm:ss.SSS").format(new Date());
+                String syncTag = "[" + humanTs + " | Ref:" + bootTime + "]";
+
+                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_STOP", syncTag + " Ready to Send");
+                MainActivity.activityInstance.logPerf("ALICE", "PREAMBLE_SEND_START",
+                        syncTag + " Signal:" + signalName + " ID:" + Constants.messageID + " Attempt:" + m_attempt);
+
                 Constants.sp1 = new AudioSpeaker(av, sig, Constants.fs, 0, sig.length, false);
                 appendToLog(Constants.SignalType.Sounding.toString());
+
+                MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", syncTag + " Playing Preamble");
                 Constants.sp1.play(Constants.volume);
 
-                int sig_len = (int)(((double)sig.length/Constants.fs)*1000);
-                sleep(sig_len+Constants.SendPad);
+                int sig_len = (int) (((double) sig.length / Constants.fs) * 1000);
+                sleep(sig_len + Constants.SendPad);
 
+                // --- ALICE WAIT FOR ACK ---
+                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_START", syncTag + " Listening for Feedback ACK...");
                 feedback_signal = Utils.waitForChirp(Constants.SignalType.Feedback, m_attempt, chirpLoopNumber);
-                chirpLoopNumber++;
-                if (chirpLoopNumber >= 3 || !Constants.work) {
-                    return -1;
+
+                if (feedback_signal == null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", syncTag + " Loop " + chirpLoopNumber + " failed. No ACK heard.");
+                    chirpLoopNumber++;
+                } else {
+                    MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", syncTag + " Handshake Complete");
                 }
-            } while (feedback_signal == null);
 
-            double[] seg = Utils.segment(feedback_signal,0,24000-1);
+                if (chirpLoopNumber >= 3 || !Constants.work) return -1;
+
+            } while (feedback_signal == null);*/
+
+            // Alice logic inside work()
+            // Inside the 'work' method for Alice
+            do {
+                short[] sig = PreambleGen.sounding_signal_s();
+
+                // Log 1: Hardware Transition
+                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_STOP", getSyncTag() + " Ready to Send");
+                try {
+                    Thread.sleep(10);
+                } catch (Exception e) {
+                } // Force clock tick
+
+                // Log 2: Protocol Start
+                String sigName = (Constants.mmap != null && Constants.mmap.containsKey(Constants.messageID))
+                        ? Constants.mmap.get(Constants.messageID) : "null";
+                MainActivity.activityInstance.logPerf("ALICE", "PREAMBLE_SEND_START", getSyncTag() + " Signal:" + sigName + " ID:" + Constants.messageID);
+                try {
+                    Thread.sleep(10);
+                } catch (Exception e) {
+                } // Force clock tick
+
+                // Log 3: Speaker Start
+                Constants.sp1 = new AudioSpeaker(av, sig, Constants.fs, 0, sig.length, false);
+                MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Preamble");
+                Constants.sp1.play(Constants.volume);
+
+                int sig_len = (int) (((double) sig.length / Constants.fs) * 1000);
+                sleep(sig_len + Constants.SendPad);
+
+                // Log 4: Mic Start
+                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_START", getSyncTag() + " Listening for ACK...");
+                feedback_signal = Utils.waitForChirp(Constants.SignalType.Feedback, m_attempt, chirpLoopNumber);
+
+                if (feedback_signal == null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", getSyncTag() + " Attempt " + chirpLoopNumber + " Failed");
+                    chirpLoopNumber++;
+                } else {
+                    MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", getSyncTag() + " Handshake OK");
+                }
+            } while (feedback_signal == null && chirpLoopNumber < 3);
+
+            // --- FUNCTIONAL LOGIC: BINS EXTRACTION ---
+            double[] seg = Utils.segment(feedback_signal, 0, 24000 - 1);
             double[] xcorr_out = Utils.xcorr_online(tx_preamble, seg);
-
-            int[] valid_bins = FeedbackSignal.extractSignalHelper(feedback_signal, (int)xcorr_out[1], m_attempt);
+            int[] valid_bins = FeedbackSignal.extractSignalHelper(feedback_signal, (int) xcorr_out[1], m_attempt);
 
             if (Constants.SEND_DATA) {
                 appendToLog(Constants.SignalType.Data.toString());
-                if (valid_bins.length >= 1 && valid_bins[0] != -1) {
+                if (valid_bins != null && valid_bins.length >= 1 && valid_bins[0] != -1) {
                     sendData(valid_bins, m_attempt);
                 }
                 try {
                     Thread.sleep(3000);
-                }
-                catch(Exception e){
-                    Log.e("asdf",e.toString());
+                } catch (Exception e) {
+                    Log.e("asdf", e.toString());
                 }
             }
             return 0;
-        }
-        else if (Constants.user.equals(Constants.User.Bob)) {
+
+        }  else if (Constants.user.equals(Constants.User.Bob)) {
             int chirpLoopNumber = 0;
             int[] valid_bins = null;
             double[] sounding_signal = null;
+
             do {
                 sounding_signal = Utils.waitForChirp(Constants.SignalType.Sounding, m_attempt, chirpLoopNumber);
-                if (sounding_signal == null) {
-                    return -1;
-                }
+                if (sounding_signal == null) return -1;
 
-                double[] seg = Utils.segment(sounding_signal,0,24000-1);
+                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_START", getSyncTag() + " Triggered!");
+
+                double[] seg = Utils.segment(sounding_signal, 0, 24000 - 1);
                 double[] xcorr_out = Utils.xcorr_online(tx_preamble, seg);
 
-                valid_bins = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int)xcorr_out[1], m_attempt);
+                // SNR Robust Fix (Preventing NaN)
+                double signalPower = xcorr_out[0];
+                double noisePower = 0.01 + 0.0001;
+                double snrVal = 10 * Math.log10(signalPower / noisePower);
+                if (Double.isNaN(snrVal)) snrVal = 0.0;
+
+                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_END", getSyncTag() + " SNR:" + String.format("%.2f", snrVal) + "dB | Peak:" + String.format("%.2f", signalPower));
+
+                valid_bins = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int) xcorr_out[1], m_attempt);
                 chirpLoopNumber++;
 
-                if (!Constants.work) {
-                    return -1;
-                }
+                if (!Constants.work) return -1;
             } while (valid_bins == null || valid_bins.length == 0 || valid_bins[0] == -1);
 
+            // --- BOB SEND ACK WITH TIMESTAMPS ---
             short[] feedback = FeedbackSignal.encodeFeedbackSignal(valid_bins[0], valid_bins[valid_bins.length - 1],
                     Constants.fbackTime, true, m_attempt);
 
             Constants.sp1 = new AudioSpeaker(av, feedback, Constants.fs, 0, feedback.length, false);
-            appendToLog(Constants.SignalType.Feedback.toString());
+
+            MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_STOP", getSyncTag() + " Sending ACK");
+
+            // FIXED: Added bobAckSync to ACK_SEND_START
+            MainActivity.activityInstance.logPerf("BOB", "ACK_SEND_START", getSyncTag() + " ID:HANDSHAKE_ACK");
+
             Constants.sp1.play(Constants.volume);
 
-            int stime = (int) ((feedback.length / (double) Constants.fs) * 1000);
-            sleep(stime+Constants.SendPad);
+            // FIXED: Added bobAckSync to SPEAKER_HARDWARE_STOP
+            MainActivity.activityInstance.logPerf("BOB", "SPEAKER_HARDWARE_STOP", getSyncTag() + " ACK Playback Finished");
 
+            int stime = (int) ((feedback.length / (double) Constants.fs) * 1000);
+            sleep(stime + Constants.SendPad);
+
+            MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_START", getSyncTag() + " Listening for Data Payload...");
             double[] data_signal = null;
             if (Constants.SEND_DATA) {
                 data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0);
             }
-            if (data_signal!=null) {
+            if (data_signal != null) {
                 Decoder.decode_helper(av, data_signal, valid_bins);
             }
             return 0;
@@ -235,30 +328,35 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         return 0;
     }
 
+
     public static void sendData(int[] valid_bins, int m_attempt) {
         send_data_per(valid_bins,m_attempt);
     }
 
     public static void send_data_helper(int numbits, int[] valid_bins, int m_attempt,
-                                 Constants.SignalType sigType,Constants.ExpType expType) {
+                                        Constants.SignalType sigType, Constants.ExpType expType) {
         short[] bits = SymbolGeneration.getCodedBits();
 
-        String out="";
-        for (int i = 0; i < bits.length; i++) {
-            out+=bits[i]+"";
-        }
+        // Convert bits to a single String for one CSV column
+        StringBuilder bitStr = new StringBuilder();
+        for (short b : bits) bitStr.append(b);
+        String bitSequence = bitStr.toString();
 
-        short[] txsig=SymbolGeneration.generateDataSymbols(bits, valid_bins, Constants.data_symreps, true, sigType,m_attempt);
+        short[] txsig = SymbolGeneration.generateDataSymbols(bits, valid_bins, Constants.data_symreps, true, sigType, m_attempt);
 
-        FileOperations.writetofile(MainActivity.av, txsig,
-                Utils.genName(Constants.SignalType.DataAdapt, m_attempt) + ".txt");
+        double duration = (double) txsig.length / Constants.fs;
+        double bitrate = (double) bits.length / duration;
+
+        MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " ID:" + Constants.messageID);
+        MainActivity.activityInstance.logPerf("ALICE", "DATA_INFO", getSyncTag() + " Bits:" + bitSequence + " | Count:" + bits.length + " | Bitrate:" + String.format("%.2f", bitrate) + "bps");
 
         Constants.sp1 = new AudioSpeaker(MainActivity.av, txsig, Constants.fs, 0, txsig.length, false);
+        MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Data");
         Constants.sp1.play(Constants.volume);
-
-        int sleepTime = (int) (((double) txsig.length / Constants.fs) * 1000);
-        sleep(sleepTime + Constants.SendPad);
+        //MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_STOP", "Transmission Complete");
+        MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_STOP", getSyncTag() + " Transmission Complete");
     }
+
 
     public static void send_data_ber(int[] valid_bins, int m_attempt) {
         FileOperations.writetofile(MainActivity.av, Constants.codeRate.toString(),

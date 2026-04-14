@@ -17,11 +17,12 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
 public class Utils {
-
+    public static int globalPacketId = 0;
     // Used to load the 'native-lib' library on application startup.
     static {
         System.loadLibrary("native-lib");
@@ -30,99 +31,172 @@ public class Utils {
     public static double[] copyArray2(Double[] sig) {
         double[] out = new double[sig.length];
         for (int i = 0; i < sig.length; i++) {
-            out[i]=sig[i];
+            out[i] = sig[i];
         }
         return out;
     }
 
     public static String pad2(String str) {
-        int padlen=Constants.maxbits-str.length();
-        String out = "";
-        int counter=0;
+        int padlen = Constants.maxbits - str.length();
+        StringBuilder out = new StringBuilder();
         for (int i = 0; i < padlen; i++) {
-            out+="0";
+            out.append("0");
         }
-        return out+str;
+        return out.toString() + str;
     }
 
     public static void log(String s) {
-        Log.e(Constants.LOG,s);
-        (MainActivity.av).runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (Constants.debugPane.getText().toString().length() > 400){
-                    Constants.debugPane.setText("");
+        Log.e(LOG, s);
+        if (MainActivity.av != null) {
+            MainActivity.av.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (Constants.debugPane.getText().toString().length() > 400) {
+                        Constants.debugPane.setText("");
+                    }
+                    Constants.debugPane.append("\n" + s);
+                    scrollToBottom();
                 }
-                Constants.debugPane.setText(Constants.debugPane.getText()+"\n"+s);
-                scrollToBottom();
-            }
-        });
+            });
+        }
     }
 
-//    public static boolean isSoundingSignal(Activity av, double[] rec) {
-//        long t1 = System.currentTimeMillis();
-//
-//        int start_point = ChannelEstimate.xcorr_helper(rec);
-//        Log.e("issounding",start_point+"");
-//
-////        Log.e("xcorr", "runtime " + (System.currentTimeMillis() - t1) + "");
-//
-//        int rx_preamble_start = start_point;
-//        int rx_preamble_end = rx_preamble_start + (int) (((Constants.preambleTime / 1000.0) * Constants.fs)) - 1;
-////        int rx_preamble_len = (rx_preamble_end - rx_preamble_start) + 1;
-////        Utils.log("preamble "+rec.length+","+rx_preamble_start+","+rx_preamble_end+","+rx_preamble_len);
-//
-//        if (rx_preamble_end - 1 > rec.length || rx_preamble_start < 0) {
-//            Utils.log("Error extracting preamble from sounding signal " + rx_preamble_start + "," + rx_preamble_end);
-////            return Constants.valid_carrier_default;
-//            return false;
-//        }
-//        double[] rx_preamble = Utils.segment(rec, rx_preamble_start, rx_preamble_end);
-////        double[] rx_preamble_db = Utils.mag2db(Utils.fftnative_double(rx_preamble, rx_preamble.length));
+    private static int signalEventCounter =0;
+
+    public static int bobPacketCounter = 0;
+
+    public static boolean isSoundingSignal(short[] rec, int attempt) {
+        long tStartTotal = android.os.SystemClock.elapsedRealtime();
+        // Use the existing native helper
+        double[] rec_double_for_xcorr = Utils.convert(rec);
+        double[] tx_preamble = PreambleGen.preamble_d();
+        double corr[] = xcorr_helper(tx_preamble, rec_double_for_xcorr);
+
+        double[] maxs = max_idx(corr);
+        int start_point = (int) maxs[0];
+
+        if (start_point > 0) {
+            bobPacketCounter++;
+            globalPacketId++;
+            signalEventCounter++;
+
+            // SNR Robust Fix: Add epsilon and check for NaN
+            double signalPower = maxs[0];
+            double noisePower = mean(corr) + 0.0001;
+            double msnr = 10 * Math.log10(signalPower / noisePower);
+            if (Double.isNaN(msnr) || Double.isInfinite(msnr)) msnr = 0.0;
+
+            if (MainActivity.activityInstance != null) {
+                MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_STOP", SendChirpAsyncTask.getSyncTag() + " Preamble Triggered");
+                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_START", SendChirpAsyncTask.getSyncTag() + " Signal Detection Start");
+            }
+
+            int rx_preamble_start = start_point;
+            int rx_preamble_end = rx_preamble_start + (int) (((Constants.preambleTime / 1000.0) * Constants.fs)) - 1;
+
+            // Boundary Check
+            if (rx_preamble_end >= rec_double_for_xcorr.length || rx_preamble_start < 0) {
+                return false;
+            }
+
+            double[] rx_preamble = Arrays.copyOfRange(rec_double_for_xcorr, rx_preamble_start, rx_preamble_end);
+            // Call the native FFT
+            long tFFTStart = android.os.SystemClock.elapsedRealtime();
+            double[] spec_symbol = fftnative_double(rx_preamble, rx_preamble.length);
+            long tFFTEnd = android.os.SystemClock.elapsedRealtime();
+
+            double[] snrs = new double[Constants.valid_carrier_preamble.length];
+            int scounter = 0;
+            for (Integer bin : Constants.valid_carrier_preamble) {
+                if (bin + 5 < spec_symbol.length) {
+                    double signal = spec_symbol[bin];
+                    double[] noiseSegment = Arrays.copyOfRange(spec_symbol, bin + 2, bin + 5);
+                    double noise = mean(noiseSegment);
+                    snrs[scounter++] = signal - noise;
+                }
+            }
+
+            if (MainActivity.activityInstance != null) {
+                // Retrieve the actual Hand Signal name from Constants
+                String signalName = (Constants.mmap != null) ? Constants.mmap.get(Constants.messageID) : "Unknown";
+
+                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_END",
+                        SendChirpAsyncTask.getSyncTag() + " ID:" + Constants.messageID + " (" + signalName + ") | SNR:" + String.format("%.2f", msnr) + "dB");
+
+                long tEndTotal = android.os.SystemClock.elapsedRealtime();
+                MainActivity.activityInstance.logPerf("BOB", "OFDM_LATENCY", "Preamble_Detection_Total:" + (tEndTotal - tStartTotal) + "ms | SNR_FFT:" + (tFFTEnd - tFFTStart) + "ms");
+            }
+
+            return msnr >= 15;
+        }
+        return false;
+    }
+
+
+    /*public static boolean isSoundingSignal(Activity av, double[] rec) {
+        long t1 = System.currentTimeMillis();
+
+        int start_point = ChannelEstimate.xcorr_helper(rec);
+        Log.e("issounding",start_point+"");
+
+        Log.e("xcorr", "runtime " + (System.currentTimeMillis() - t1) + "");
+
+        int rx_preamble_start = start_point;
+        int rx_preamble_end = rx_preamble_start + (int) (((Constants.preambleTime / 1000.0) * Constants.fs)) - 1;
+        int rx_preamble_len = (rx_preamble_end - rx_preamble_start) + 1;
+        Utils.log("preamble "+rec.length+","+rx_preamble_start+","+rx_preamble_end+","+rx_preamble_len);
+
+        if (rx_preamble_end - 1 > rec.length || rx_preamble_start < 0) {
+            Utils.log("Error extracting preamble from sounding signal " + rx_preamble_start + "," + rx_preamble_end);
+            //return Constants.valid_carrier_default;
+            return false;
+        }
+        double[] rx_preamble = Utils.segment(rec, rx_preamble_start, rx_preamble_end);
+        double[] rx_preamble_db = Utils.mag2db(Utils.fftnative_double(rx_preamble, rx_preamble.length));
 //
 //        ////////////////////////////////////////////////////////////////////////////////////
-//
-////        int rx_sym_start = rx_preamble_end + Constants.ChirpGap + 1 + (Constants.Cp * Constants.chanest_symreps);
-//        int rx_sym_start = rx_preamble_end + Constants.ChirpGap + 1;
-//        int rx_sym_end = rx_sym_start + (Constants.Ns * Constants.chanest_symreps) - 1;
-//        int rx_sym_len = (rx_sym_end - rx_sym_start) + 1;
-//
-//        if (rx_sym_end - 1 > rec.length || rx_sym_start < 0) {
-//            Utils.log("Error extracting preamble from sounding signal");
-////            return Constants.valid_carrier_default;
-//            return false;
-//        }
-//        Log.e(LOG, "sym " + rec.length + "," + rx_sym_start + "," + rx_sym_end + "," + rx_sym_len);
-//        double[] rx_symbols = Utils.segment(rec, rx_sym_start, rx_sym_end);
-//        rx_symbols = Utils.div(rx_symbols,30000);
-//
-//        double[] spec_symbol = Utils.fftnative_double(rx_symbols, rx_symbols.length);
-//
-////        int freqSpacing = Constants.fs/Constants.Ns;
-////        int[] fseq = Utils.linspace(Constants.f_range[0],freqSpacing,Constants.f_range[1]);
-//
-//        double[] snrs = new double[Constants.valid_carrier_preamble.length];
-//
-//        int scounter=0;
-//        Log.e("issounding",Constants.valid_carrier_preamble.length+"");
-//        for (Integer bin : Constants.valid_carrier_preamble) {
-//            Log.e("issounding",bin+","+snrs.length);
-//            double signal = spec_symbol[bin];
-//            double noise = Utils.mean(Utils.segment(spec_symbol,bin+2,bin+5));
-//            double snr = signal-noise;
-//            Log.e("issounding",signal+","+noise);
-//            snrs[scounter++]=snr;
-//        }
-//
-//        double msnr = Utils.mean(snrs);
-//        Log.e("issounding",msnr+"");
-//
-//        if (msnr < 15) {
-//            return false;
-//        }
-//
-//        return true;
-//    }
+
+        int rx_sym_start = rx_preamble_end + Constants.ChirpGap + 1 + (Constants.Cp * Constants.chanest_symreps);
+        //int rx_sym_start = rx_preamble_end + Constants.ChirpGap + 1;
+        int rx_sym_end = rx_sym_start + (Constants.Ns * Constants.chanest_symreps) - 1;
+        int rx_sym_len = (rx_sym_end - rx_sym_start) + 1;
+
+        if (rx_sym_end - 1 > rec.length || rx_sym_start < 0) {
+            Utils.log("Error extracting preamble from sounding signal");
+            //return Constants.valid_carrier_default;
+            return false;
+        }
+        Log.e(LOG, "sym " + rec.length + "," + rx_sym_start + "," + rx_sym_end + "," + rx_sym_len);
+        double[] rx_symbols = Utils.segment(rec, rx_sym_start, rx_sym_end);
+        rx_symbols = Utils.div(rx_symbols,30000);
+
+        double[] spec_symbol = Utils.fftnative_double(rx_symbols, rx_symbols.length);
+
+        int freqSpacing = Constants.fs/Constants.Ns;
+        int[] fseq = Utils.linspace(Constants.f_range[0],freqSpacing,Constants.f_range[1]);
+
+        double[] snrs = new double[Constants.valid_carrier_preamble.length];
+
+        int scounter=0;
+        Log.e("issounding",Constants.valid_carrier_preamble.length+"");
+        for (Integer bin : Constants.valid_carrier_preamble) {
+            Log.e("issounding",bin+","+snrs.length);
+            double signal = spec_symbol[bin];
+            double noise = Utils.mean(Utils.segment(spec_symbol,bin+2,bin+5));
+            double snr = signal-noise;
+            Log.e("issounding",signal+","+noise);
+            snrs[scounter++]=snr;
+        }
+
+        double msnr = Utils.mean(snrs);
+        Log.e("issounding",msnr+"");
+
+        if (msnr < 15) {
+            return false;
+        }
+
+        return true;
+    }*/
 
     public static double[] sum(double[] a, double[] b) {
         double[] out = new double[a.length];
@@ -980,11 +1054,16 @@ public class Utils {
     }
 
     public static double[] xcorr_helper(double[] preamble, double[] sig) {
+        long tStart = android.os.SystemClock.elapsedRealtime();
         double[][] a = Utils.fftcomplexoutnative_double(preamble, sig.length);
         double[][] b = Utils.fftcomplexoutnative_double(sig, sig.length);
         Utils.conjnative(b);
         double[][] multout = Utils.timesnative(a, b);
         double[] corr = Utils.ifftnative(multout);
+        long tEnd = android.os.SystemClock.elapsedRealtime();
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("SYSTEM", "OFDM_LATENCY", "XCorr_FFT_Based:" + (tEnd - tStart) + "ms | SigLen:" + sig.length);
+        }
         return corr;
     }
 
@@ -1153,4 +1232,6 @@ public class Utils {
     public static native double[][] dividenative(double[][] data1,double[][] data2);
     public static native double[] bandpass(double[] data);
     public static native double[] fir(double[] data, double[] h);
+
+
 }
