@@ -1,0 +1,40 @@
+{
+  "stringTable": {},
+  "buildFiles": [
+    "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/user/Android/Sdk/cmake/3.10.2.4988404/bin/ninja",
+      "-C",
+      "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/.cxx/Debug/6r6e5wt3/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/user/Android/Sdk/cmake/3.10.2.4988404/bin/ninja",
+    "-C",
+    "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/.cxx/Debug/6r6e5wt3/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "native-lib-Debug-arm64-v8a": {
+      "buildCommandComponents": [
+        "/home/user/Android/Sdk/cmake/3.10.2.4988404/bin/ninja",
+        "-C",
+        "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/.cxx/Debug/6r6e5wt3/arm64-v8a",
+        "native-lib"
+      ],
+      "buildType": "debug",
+      "abi": "arm64-v8a",
+      "artifactName": "native-lib",
+      "output": "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/build/intermediates/cxx/Debug/6r6e5wt3/obj/arm64-v8a/libnative-lib.so",
+      "runtimeFiles": []
+    }
+  },
+  "toolchains": {},
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

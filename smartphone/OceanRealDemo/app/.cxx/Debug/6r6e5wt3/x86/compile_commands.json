@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/.cxx/Debug/6r6e5wt3/x86",
+  "command": "/home/user/Android/Sdk/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=i686-none-linux-android21 --gcc-toolchain=/home/user/Android/Sdk/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64 --sysroot=/home/user/Android/Sdk/ndk/21.4.7075529/toolchains/llvm/prebuilt/linux-x86_64/sysroot  -Dnative_lib_EXPORTS  -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -mstackrealign -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -O0 -fno-limit-debug-info  -fPIC   -o CMakeFiles/native-lib.dir/src/main/cpp/native-lib.cpp.o -c /home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/src/main/cpp/native-lib.cpp",
+  "file": "/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/src/main/cpp/native-lib.cpp"
+}
+]

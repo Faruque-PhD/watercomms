@@ -1,0 +1,7 @@
+Executable : /home/user/Android/Sdk/cmake/3.10.2.4988404/bin/ninja
+arguments : 
+-C
+/home/user/Research_Codes/watercomms/smartphone/OceanRealDemo/app/.cxx/Debug/6r6e5wt3/arm64-v8a
+native-lib
+jvmArgs : 
+

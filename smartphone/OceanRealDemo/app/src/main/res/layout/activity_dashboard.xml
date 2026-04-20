@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000814">
+
+    <!-- Header Status Bar -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#001d3d"
+        android:gravity="center_vertical"
+        android:padding="10dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="OCEAN REAL"
+            android:textColor="#00f5d4"
+            android:textStyle="bold"
+            android:textSize="18sp" />
+
+        <ImageView
+            android:id="@+id/channelIcon"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_lock_silent_mode_off"
+            app:tint="#00f5d4" />
+    </LinearLayout>
+
+    <!-- Main Stage: Image Views -->
+    <LinearLayout
+        android:id="@+id/imageStage"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:padding="20dp"
+        app:layout_constraintBottom_toTopOf="@+id/controls"
+        app:layout_constraintTop_toBottomOf="@id/header">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TRANSMITTING"
+            android:textColor="#99ffffff"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/sourceImage"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginTop="5dp"
+            android:background="#001d3d"
+            android:scaleType="centerInside" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="RECEIVING / RECONSTRUCTION"
+            android:textColor="#99ffffff"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/reconstructedImage"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginTop="5dp"
+            android:background="#001d3d"
+            android:scaleType="centerInside" />
+    </LinearLayout>
+
+    <!-- Progress Ring Overlay -->
+    <ProgressBar
+        android:id="@+id/circularProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:indeterminate="false"
+        android:max="100"
+        android:progress="0"
+        android:progressDrawable="@android:drawable/progress_horizontal"
+        app:layout_constraintBottom_toBottomOf="@id/imageStage"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/imageStage"
+        android:visibility="gone"/>
+
+    <!-- Alignment Tool Overlay (Camera Preview) - Circular -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cameraCard"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_margin="16dp"
+        app:cardCornerRadius="50dp"
+        app:layout_constraintBottom_toTopOf="@+id/controls"
+        app:layout_constraintStart_toStartOf="parent">
+        
+        <androidx.camera.view.PreviewView
+            android:id="@+id/alignmentPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+            
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/ic_launcher_background"
+            android:alpha="0.2"/>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Bottom Controls -->
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#001d3d"
+        android:orientation="vertical"
+        android:padding="15dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/statusConsole"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:background="#000814"
+            android:fontFamily="monospace"
+            android:padding="5dp"
+            android:text="System Ready..."
+            android:textColor="#00f5d4"
+            android:textSize="10sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+
+            <Button
+                android:id="@+id/igniteButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="5dp"
+                android:backgroundTint="#00f5d4"
+                android:text="IGNITE"
+                android:textColor="#000814"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/listenButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginStart="5dp"
+                android:backgroundTint="#ff5d00"
+                android:text="LISTEN"
+                android:textColor="#ffffff"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="5dp">
+
+            <Button
+                android:id="@+id/cameraToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="5dp"
+                android:backgroundTint="#3a86ff"
+                android:text="START CAMERA"
+                android:textColor="#ffffff"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/captureButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginStart="5dp"
+                android:backgroundTint="#ffffff"
+                android:text="CAPTURE"
+                android:textColor="#000000"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -118,10 +118,12 @@ public class FeedbackSignal {
         MainActivity.av.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                Display.plotSpectrum(Constants.gview3, spec_fback_db, true, MainActivity.av.getResources().getColor(R.color.purple_500),
-                        "Tx feedback "+finalFbegin+","+finalFend);
-                Display.plotVerticalLine(Constants.gview3, Constants.f_seq.get(Constants.nbin1_chanest -2));
-                Display.plotVerticalLine(Constants.gview3, Constants.f_seq.get(Constants.nbin2_chanest +2));
+                if (Constants.gview3 != null) {
+                    Display.plotSpectrum(Constants.gview3, spec_fback_db, true, MainActivity.av.getResources().getColor(R.color.purple_500),
+                            "Tx feedback " + finalFbegin + "," + finalFend);
+                    Display.plotVerticalLine(Constants.gview3, Constants.f_seq.get(Constants.nbin1_chanest - 2));
+                    Display.plotVerticalLine(Constants.gview3, Constants.f_seq.get(Constants.nbin2_chanest + 2));
+                }
             }
         });
 
@@ -150,14 +152,20 @@ public class FeedbackSignal {
         (MainActivity.av).runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                Constants.gview2.removeAllSeries();
-                Constants.gview3.removeAllSeries();
-                Constants.gview2.setTitle("");
-                Constants.gview3.setTitle("");
-                Display.plotSpectrum(Constants.gview, preamble_spec_db, true, MainActivity.av.getResources().getColor(R.color.purple_500),"");
+                if (Constants.gview2 != null) {
+                    Constants.gview2.removeAllSeries();
+                    Constants.gview2.setTitle("");
+                }
+                if (Constants.gview3 != null) {
+                    Constants.gview3.removeAllSeries();
+                    Constants.gview3.setTitle("");
+                }
+                if (Constants.gview != null) {
+                    Display.plotSpectrum(Constants.gview, preamble_spec_db, true, MainActivity.av.getResources().getColor(R.color.purple_500), "");
 
-                Display.plotVerticalLine(Constants.gview, Constants.f_seq.get(Constants.nbin1_chanest));
-                Display.plotVerticalLine(Constants.gview, Constants.f_seq.get(Constants.nbin2_chanest));
+                    Display.plotVerticalLine(Constants.gview, Constants.f_seq.get(Constants.nbin1_chanest));
+                    Display.plotVerticalLine(Constants.gview, Constants.f_seq.get(Constants.nbin2_chanest));
+                }
 
                 if (freqs.length==2) {
                     Display.plotSpectrum(Constants.gview2, feedback_spec_db, true, MainActivity.av.getResources().getColor(R.color.purple_500),
@@ -168,8 +176,10 @@ public class FeedbackSignal {
                             "Rx Feedback");
                 }
 
-                Display.plotVerticalLine(Constants.gview2, Constants.f_seq.get(Constants.nbin1_default -2));
-                Display.plotVerticalLine(Constants.gview2, Constants.f_seq.get(Constants.nbin2_default +2));
+                if (Constants.gview2 != null) {
+                    Display.plotVerticalLine(Constants.gview2, Constants.f_seq.get(Constants.nbin1_default - 2));
+                    Display.plotVerticalLine(Constants.gview2, Constants.f_seq.get(Constants.nbin2_default + 2));
+                }
             }
         });
 

@@ -79,4 +79,16 @@ public class AudioSpeaker extends Thread {
     public void pause() {
         track1.pause();
     }
+
+    public void release() {
+        if (track1 != null) {
+            try {
+                track1.stop();
+                track1.release();
+                track1 = null;
+            } catch (Exception e) {
+                Log.e("AudioSpeaker", "Release failed: " + e.getMessage());
+            }
+        }
+    }
 }

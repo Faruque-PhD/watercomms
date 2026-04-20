@@ -360,13 +360,23 @@ public class SymbolGeneration {
         return false;
     }
 
+    public static short[] getPacketBits(com.example.root.ffttest2.transport.ImagePacket packet) {
+        if (packet == null) return new short[0];
+        byte[] data = packet.toBytes();
+        short[] bits = new short[data.length * 8];
+        for (int i = 0; i < data.length; i++) {
+            for (int j = 7; j >= 0; j--) {
+                bits[i * 8 + (7 - j)] = (short) ((data[i] >> j) & 1);
+            }
+        }
+        return bits;
+    }
+
     public static short[] getCodedBits() {
+        // ... (existing implementation)
         long tStart = android.os.SystemClock.elapsedRealtime();
         String uncoded = Utils.pad2(Integer.toBinaryString(Constants.messageID));
         String coded = "";
-        if (MainActivity.activityInstance != null) {
-            MainActivity.activityInstance.logResearchEvent("RECEIVE_SUCCESS", "ID_" + Constants.messageID, "Decoded");
-        } // added for checking
         if (Constants.CODING) {
             coded = Utils.encode(uncoded, Constants.cc[0],Constants.cc[1],Constants.cc[2]);
         }

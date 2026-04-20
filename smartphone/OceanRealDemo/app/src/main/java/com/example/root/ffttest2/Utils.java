@@ -51,11 +51,16 @@ public class Utils {
             MainActivity.av.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    if (Constants.debugPane.getText().toString().length() > 400) {
-                        Constants.debugPane.setText("");
+                    if (Constants.debugPane != null) {
+                        if (Constants.debugPane.getText().toString().length() > 400) {
+                            Constants.debugPane.setText("");
+                        }
+                        Constants.debugPane.append("\n" + s);
+                        scrollToBottom();
                     }
-                    Constants.debugPane.append("\n" + s);
-                    scrollToBottom();
+                    if (Constants.statusConsole != null) {
+                        Constants.statusConsole.setText(s);
+                    }
                 }
             });
         }
@@ -292,11 +297,13 @@ public class Utils {
     }
 
     public static void scrollToBottom() {
-        Constants.sview.post(new Runnable() {
-            public void run() {
-                Constants.sview.smoothScrollTo(0, Constants.debugPane.getBottom());
-            }
-        });
+        if (Constants.sview != null && Constants.debugPane != null) {
+            Constants.sview.post(new Runnable() {
+                public void run() {
+                    Constants.sview.smoothScrollTo(0, Constants.debugPane.getBottom());
+                }
+            });
+        }
     }
 
     public static String trim(String s) {

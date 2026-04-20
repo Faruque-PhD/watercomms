@@ -13,7 +13,8 @@ public class Display {
     static double currentMin=100000;
     static double currentMax=-100000;
 
-    public static void plotVerticalLine(GraphView gview, int x) {
+    public static void plotVerticalLine(GraphView gview, double x) {
+        if (gview == null) return;
         DataPoint[] dp = new DataPoint[2];
         dp[0] = new DataPoint(x, currentMin);
         dp[1] = new DataPoint(x, currentMax);
@@ -32,6 +33,7 @@ public class Display {
     }
 
     public static void plotSpectrum(GraphView gview, double[] spectrum, boolean clear, int c, String title) {
+        if (gview == null) return;
         if (clear) {
             gview.removeAllSeries();
             currentMin = 100000;

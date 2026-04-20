@@ -142,7 +142,7 @@ public class Constants {
     public static long ts;
     public static Button startButton,clearButton,stopButton;
     public static float volume=0.6f;
-    public static TextView tv1,tv2,tv3,tv4, debugPane,tv5,tv6,tv7,tv8,tv9,tv10,tv13,tv14,tv15,tv16,tv17,tv18,tv19,tv20,tv21,msgview;
+    public static TextView tv1,tv2,tv3,tv4, debugPane,tv5,tv6,tv7,tv8,tv9,tv10,tv13,tv14,tv15,tv16,tv17,tv18,tv19,tv20,tv21,msgview, statusConsole;
     public static NestedScrollView sview;
     public static CountDownTimer timer;
     public static EditText et1,et2,et3,et4,et5,et6,et7,et8,et9,et10,et11,et12,et13,et14,et15,et17,et18,et25,et26,et27;
@@ -475,43 +475,44 @@ public class Constants {
     static boolean SPEECH_OUT=false;
 
     public static void toggleUI(boolean val) {
-        Constants.sw1.setEnabled(val);
-        Constants.sw2.setEnabled(val);
-        Constants.sw3.setEnabled(val);
-//        Constants.sw4.setEnabled(val);
-//        Constants.sw5.setEnabled(val);
-//        Constants.sw6.setEnabled(val);
-        Constants.sw7.setEnabled(val);
-        Constants.sw8.setEnabled(val);
-        Constants.sw9.setEnabled(val);
-        Constants.sw10.setEnabled(val);
-        Constants.sw11.setEnabled(val);
-//        Constants.startButton.setEnabled(val);
-        Constants.clearButton.setEnabled(val);
-//        Constants.stopButton.setEnabled(!val);
-        Constants.et1.setEnabled(val);
-        Constants.et2.setEnabled(val);
-        Constants.et3.setEnabled(val);
-        Constants.et4.setEnabled(val);
-        Constants.et5.setEnabled(val);
-        Constants.et6.setEnabled(val);
-        Constants.et7.setEnabled(val);
-        Constants.et8.setEnabled(val);
-        Constants.et9.setEnabled(val);
-        Constants.et10.setEnabled(val);
-        Constants.et11.setEnabled(val);
-        Constants.et12.setEnabled(val);
-        Constants.et13.setEnabled(val);
-        Constants.et14.setEnabled(val);
-        Constants.et15.setEnabled(val);
-        Constants.et17.setEnabled(val);
-        Constants.et18.setEnabled(val);
-        Constants.et25.setEnabled(val);
-        Constants.et26.setEnabled(val);
-        Constants.et27.setEnabled(val);
-        Constants.spinner.setEnabled(val);
-        Constants.spinner2.setEnabled(val);
-        Constants.spinner3.setEnabled(val);
+        if (Constants.sw1 != null) Constants.sw1.setEnabled(val);
+        if (Constants.sw2 != null) Constants.sw2.setEnabled(val);
+        if (Constants.sw3 != null) Constants.sw3.setEnabled(val);
+//        if (Constants.sw4 != null) Constants.sw4.setEnabled(val);
+//        if (Constants.sw5 != null) Constants.sw5.setEnabled(val);
+//        if (Constants.sw6 != null) Constants.sw6.setEnabled(val);
+        if (Constants.sw7 != null) Constants.sw7.setEnabled(val);
+        if (Constants.sw8 != null) Constants.sw8.setEnabled(val);
+        if (Constants.sw9 != null) Constants.sw9.setEnabled(val);
+        if (Constants.sw10 != null) Constants.sw10.setEnabled(val);
+        if (Constants.sw11 != null) Constants.sw11.setEnabled(val);
+        if (Constants.sw12 != null) Constants.sw12.setEnabled(val);
+//        if (Constants.startButton != null) Constants.startButton.setEnabled(val);
+        if (Constants.clearButton != null) Constants.clearButton.setEnabled(val);
+//        if (Constants.stopButton != null) Constants.stopButton.setEnabled(!val);
+        if (Constants.et1 != null) Constants.et1.setEnabled(val);
+        if (Constants.et2 != null) Constants.et2.setEnabled(val);
+        if (Constants.et3 != null) Constants.et3.setEnabled(val);
+        if (Constants.et4 != null) Constants.et4.setEnabled(val);
+        if (Constants.et5 != null) Constants.et5.setEnabled(val);
+        if (Constants.et6 != null) Constants.et6.setEnabled(val);
+        if (Constants.et7 != null) Constants.et7.setEnabled(val);
+        if (Constants.et8 != null) Constants.et8.setEnabled(val);
+        if (Constants.et9 != null) Constants.et9.setEnabled(val);
+        if (Constants.et10 != null) Constants.et10.setEnabled(val);
+        if (Constants.et11 != null) Constants.et11.setEnabled(val);
+        if (Constants.et12 != null) Constants.et12.setEnabled(val);
+        if (Constants.et13 != null) Constants.et13.setEnabled(val);
+        if (Constants.et14 != null) Constants.et14.setEnabled(val);
+        if (Constants.et15 != null) Constants.et15.setEnabled(val);
+        if (Constants.et17 != null) Constants.et17.setEnabled(val);
+        if (Constants.et18 != null) Constants.et18.setEnabled(val);
+        if (Constants.et25 != null) Constants.et25.setEnabled(val);
+        if (Constants.et26 != null) Constants.et26.setEnabled(val);
+        if (Constants.et27 != null) Constants.et27.setEnabled(val);
+        if (Constants.spinner != null) Constants.spinner.setEnabled(val);
+        if (Constants.spinner2 != null) Constants.spinner2.setEnabled(val);
+        if (Constants.spinner3 != null) Constants.spinner3.setEnabled(val);
     }
 
     public static void resetRandom() {random = new Random(1);};
@@ -558,9 +559,11 @@ public class Constants {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(cxt);
         // populate UI elements
         Constants.user=User.valueOf(prefs.getString("user", User.Alice.toString()));
-        sw1.setText(Constants.user.toString());
-        sw1.setChecked(Constants.user.equals(User.Alice));
-        Constants.sw2.setEnabled(!sw1.isChecked());
+        if (sw1 != null) {
+            sw1.setText(Constants.user.toString());
+            sw1.setChecked(Constants.user.equals(User.Alice));
+        }
+        if (Constants.sw2 != null) Constants.sw2.setEnabled(sw1 != null && !sw1.isChecked());
 
 //        if (Constants.user.equals(User.Alice)) {
 //            Constants.gview3.setVisibility(View.GONE);
@@ -568,140 +571,144 @@ public class Constants {
 //        else if (Constants.user.equals(User.Bob)) {
 //            Constants.gview3.setVisibility(View.VISIBLE);
 //        }
-        Constants.gview.setVisibility(View.GONE);
+        if (Constants.gview != null) Constants.gview.setVisibility(View.GONE);
 
         Constants.volume=prefs.getFloat("volume",Constants.volume);
-        et1.setText(Constants.volume+"");
+        if (et1 != null) et1.setText(Constants.volume+"");
 
 //        Constants.preambleTime=prefs.getInt("preamble_len",Constants.preambleTime);
 //        et2.setText(Constants.preambleTime+"");
 
         Constants.initSleep=prefs.getInt("init_sleep",Constants.initSleep);
-        et3.setText(Constants.initSleep+"");
+        if (et3 != null) et3.setText(Constants.initSleep+"");
 
         Constants.DecodeData=prefs.getBoolean("decode_data", Constants.DecodeData);
-        sw2.setChecked(Constants.DecodeData);
+        if (sw2 != null) sw2.setChecked(Constants.DecodeData);
 
         Constants.TEST=prefs.getBoolean("test", Constants.TEST);
-        sw3.setChecked(Constants.TEST);
+        if (sw3 != null) sw3.setChecked(Constants.TEST);
 
         Constants.stereo=prefs.getBoolean("stereo", Constants.stereo);
-        sw4.setChecked(Constants.stereo);
+        if (sw4 != null) sw4.setChecked(Constants.stereo);
 
         Constants.imu=prefs.getBoolean("imu", Constants.imu);
-        sw5.setChecked(Constants.imu);
+        if (sw5 != null) sw5.setChecked(Constants.imu);
 
         Constants.est_sig=EstSignalType.valueOf(prefs.getString("est_sig", Constants.est_sig.toString()));
-        sw6.setChecked(Constants.est_sig.equals(EstSignalType.Chirp));
-        sw6.setText(Constants.est_sig.toString());
+        if (sw6 != null) {
+            sw6.setChecked(Constants.est_sig.equals(EstSignalType.Chirp));
+            sw6.setText(Constants.est_sig.toString());
+        }
 
         Constants.feedbackPreamble=prefs.getBoolean("feed_pre", Constants.feedbackPreamble);
-        sw7.setChecked(Constants.feedbackPreamble);
+        if (sw7 != null) sw7.setChecked(Constants.feedbackPreamble);
 
         Constants.SEND_DATA=prefs.getBoolean("send_data", Constants.SEND_DATA);
-        sw8.setChecked(Constants.SEND_DATA);
+        if (sw8 != null) sw8.setChecked(Constants.SEND_DATA);
 
         Constants.FLIP_SYMBOL=prefs.getBoolean("flip_symbol", Constants.FLIP_SYMBOL);
-        sw9.setChecked(Constants.FLIP_SYMBOL);
+        if (sw9 != null) sw9.setChecked(Constants.FLIP_SYMBOL);
 
         Constants.NAISER=prefs.getBoolean("naiser", Constants.NAISER);
-        sw10.setChecked(Constants.NAISER);
+        if (sw10 != null) sw10.setChecked(Constants.NAISER);
 
         Constants.CHECK_SYM=prefs.getBoolean("check_sym", Constants.CHECK_SYM);
-        sw11.setChecked(Constants.CHECK_SYM);
+        if (sw11 != null) sw11.setChecked(Constants.CHECK_SYM);
 
-        updateNaiser(MainActivity.av);
+        updateNaiser(cxt);
 
         Constants.Nsyms=prefs.getInt("nsyms",Constants.Nsyms);
-        et5.setText(Constants.Nsyms+"");
+        if (et5 != null) et5.setText(Constants.Nsyms+"");
 
         Constants.f_range[0]=prefs.getInt("f1",Constants.f_range[0]);
-        et6.setText(Constants.f_range[0]+"");
+        if (et6 != null) et6.setText(Constants.f_range[0]+"");
         Constants.f_range[1]=prefs.getInt("f2",Constants.f_range[1]);
-        et7.setText(Constants.f_range[1]+"");
+        if (et7 != null) et7.setText(Constants.f_range[1]+"");
         Constants.data_symreps =prefs.getInt("symreps",Constants.data_symreps);
-        et8.setText(Constants.data_symreps +"");
+        if (et8 != null) et8.setText(Constants.data_symreps +"");
 
         Constants.mattempts=prefs.getInt("mattempts",Constants.mattempts);
-        et9.setText(Constants.mattempts+"");
+        if (et9 != null) et9.setText(Constants.mattempts+"");
 
         Constants.exp_num=prefs.getInt("exp_num",Constants.exp_num);
-        et10.setText(Constants.exp_num+"");
+        if (et10 != null) et10.setText(Constants.exp_num+"");
 
         Constants.SyncLag=prefs.getInt("sync_lag",Constants.SyncLag);
-        et11.setText(Constants.SyncLag+"");
+        if (et11 != null) et11.setText(Constants.SyncLag+"");
 
         Constants.FreAdaptScaleFactor=prefs.getFloat("scale_factor",(float)Constants.FreAdaptScaleFactor);
-        et12.setText(Constants.FreAdaptScaleFactor+"");
+        if (et12 != null) et12.setText(Constants.FreAdaptScaleFactor+"");
 
         Constants.SNR_THRESH2_2=(int)prefs.getInt("snr_thresh2_2",Constants.SNR_THRESH2_2);
-        et13.setText(Constants.SNR_THRESH2_2+"");
+        if (et13 != null) et13.setText(Constants.SNR_THRESH2_2+"");
 
         Constants.MinXcorrVal=prefs.getFloat("xcorr_thresh",(float)Constants.MinXcorrVal);
-        et14.setText(Constants.MinXcorrVal+"");
+        if (et14 != null) et14.setText(Constants.MinXcorrVal+"");
 
         Constants.XCORR_MAX_VAL_HEIGHT_FAC=prefs.getFloat("xcorr_thresh2",(float)Constants.XCORR_MAX_VAL_HEIGHT_FAC);
-        et15.setText(Constants.XCORR_MAX_VAL_HEIGHT_FAC+"");
+        if (et15 != null) et15.setText(Constants.XCORR_MAX_VAL_HEIGHT_FAC+"");
 
         Constants.VAR_THRESH=prefs.getInt("var_thresh",Constants.VAR_THRESH);
-        et17.setText(Constants.VAR_THRESH+"");
+        if (et17 != null) et17.setText(Constants.VAR_THRESH+"");
 
         Constants.XcorrAboveThresh=prefs.getInt("xcorr_above_thresh",Constants.XcorrAboveThresh);
-        et18.setText(Constants.XcorrAboveThresh+"");
+        if (et18 != null) et18.setText(Constants.XcorrAboveThresh+"");
 
 //        Constants.NaiserThresh=prefs.getFloat("naiser_thresh",Constants.NaiserThresh);
 //        et25.setText(Constants.NaiserThresh+"");
 
         Constants.FEEDBACK_SNR_THRESH=prefs.getInt("feedback_thresh",Constants.FEEDBACK_SNR_THRESH);
-        et26.setText(Constants.FEEDBACK_SNR_THRESH+"");
+        if (et26 != null) et26.setText(Constants.FEEDBACK_SNR_THRESH+"");
 
         Constants.CheckSymSNRThresh=prefs.getInt("checksym_snrthresh",Constants.CheckSymSNRThresh);
-        et27.setText(Constants.CheckSymSNRThresh+"");
+        if (et27 != null) et27.setText(Constants.CheckSymSNRThresh+"");
 
         preambleStartFreq = f_range[0];
         preambleEndFreq = f_range[1];
 
 //        Constants.codeRate=CodeRate.valueOf(prefs.getString("code_rate", Constants.codeRate.toString()));
 //        if (Constants.codeRate.equals(CodeRate.None)) {
-//            Constants.spinner.setSelection(0);
+//            if (Constants.spinner != null) Constants.spinner.setSelection(0);
 //        }
 //        else if (Constants.codeRate.equals(CodeRate.C1_2)) {
-//            Constants.spinner.setSelection(1);
+//            if (Constants.spinner != null) Constants.spinner.setSelection(1);
 //        }
 //        else if (Constants.codeRate.equals(CodeRate.C2_3)) {
-//            Constants.spinner.setSelection(2);
+//            if (Constants.spinner != null) Constants.spinner.setSelection(2);
 //        }
 
         Constants.snr_method=prefs.getInt("snr_method",Constants.snr_method);
         Log.e("snr",Constants.snr_method+"");
         if (Constants.snr_method==1) {
-            Constants.spinner2.setSelection(0);
+            if (Constants.spinner2 != null) Constants.spinner2.setSelection(0);
         }
         else if (Constants.snr_method==2) {
-            Constants.spinner2.setSelection(1);
+            if (Constants.spinner2 != null) Constants.spinner2.setSelection(1);
         }
 
 //        if (Constants.snr_method==1) {
 //            Constants.SNR_THRESH1 = prefs.getInt("snr_thresh1", Constants.SNR_THRESH1);
-//            et4.setText(Constants.SNR_THRESH1 + "");
+//            if (et4 != null) et4.setText(Constants.SNR_THRESH1 + "");
 //        }
 //        else if (Constants.snr_method==2) {
             Constants.SNR_THRESH2 = prefs.getInt("snr_thresh2", Constants.SNR_THRESH2);
-            et4.setText(Constants.SNR_THRESH2 + "");
+            if (et4 != null) et4.setText(Constants.SNR_THRESH2 + "");
 //        }
 
         Constants.Ns=prefs.getInt("ns",Constants.Ns);
-        if (Constants.Ns==960) {
-            Constants.spinner3.setSelection(0);
-        }
-        else if (Constants.Ns==1920) {
-            Constants.spinner3.setSelection(1);
-        }
-        else if (Constants.Ns==4800) {
-            Constants.spinner3.setSelection(2);
-        }
-        else if (Constants.Ns==9600) {
-            Constants.spinner3.setSelection(3);
+        if (Constants.spinner3 != null) {
+            if (Constants.Ns==960) {
+                Constants.spinner3.setSelection(0);
+            }
+            else if (Constants.Ns==1920) {
+                Constants.spinner3.setSelection(1);
+            }
+            else if (Constants.Ns==4800) {
+                Constants.spinner3.setSelection(2);
+            }
+            else if (Constants.Ns==9600) {
+                Constants.spinner3.setSelection(3);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////

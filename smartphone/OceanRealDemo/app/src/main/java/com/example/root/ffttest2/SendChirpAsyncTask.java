@@ -19,9 +19,17 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
     private static int m_attempt = 0;
     Activity av;
     int num_measurements = 0;
+    private java.util.List<com.example.root.ffttest2.transport.ImagePacket> packetQueue;
+
     public SendChirpAsyncTask(Activity activity, int num_measurements) {
         this.av = activity;
         this.num_measurements = num_measurements;
+    }
+
+    public SendChirpAsyncTask(Activity activity, java.util.List<com.example.root.ffttest2.transport.ImagePacket> packets) {
+        this.av = activity;
+        this.packetQueue = packets;
+        this.num_measurements = 1; // One "session" for the whole image
     }
 
     public static String getSyncTag() {
@@ -86,7 +94,7 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
         if (Constants.timer!=null) {
             Constants.timer.cancel();
-            tv4.setText("0");
+            if (tv4 != null) tv4.setText("0");
         }
 
         Constants.sp1=null;
@@ -160,7 +168,7 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         MainActivity.av.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                tv4.setText(ss);
+                if (tv4 != null) tv4.setText(ss);
             }
         });
     }
@@ -215,7 +223,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 short[] sig = PreambleGen.sounding_signal_s();
 
                 // Log 1: Hardware Transition
-                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_STOP", getSyncTag() + " Ready to Send");
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_STOP", getSyncTag() + " Ready to Send");
+                }
                 try {
                     Thread.sleep(10);
                 } catch (Exception e) {
@@ -224,29 +234,39 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 // Log 2: Protocol Start
                 String sigName = (Constants.mmap != null && Constants.mmap.containsKey(Constants.messageID))
                         ? Constants.mmap.get(Constants.messageID) : "null";
-                MainActivity.activityInstance.logPerf("ALICE", "PREAMBLE_SEND_START", getSyncTag() + " Signal:" + sigName + " ID:" + Constants.messageID);
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "PREAMBLE_SEND_START", getSyncTag() + " Signal:" + sigName + " ID:" + Constants.messageID);
+                }
                 try {
                     Thread.sleep(10);
                 } catch (Exception e) {
                 } // Force clock tick
 
                 // Log 3: Speaker Start
+                if (Constants.sp1 != null) Constants.sp1.release();
                 Constants.sp1 = new AudioSpeaker(av, sig, Constants.fs, 0, sig.length, false);
-                MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Preamble");
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Preamble");
+                }
                 Constants.sp1.play(Constants.volume);
-
                 int sig_len = (int) (((double) sig.length / Constants.fs) * 1000);
                 sleep(sig_len + Constants.SendPad);
 
                 // Log 4: Mic Start
-                MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_START", getSyncTag() + " Listening for ACK...");
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("ALICE", "MIC_HARDWARE_START", getSyncTag() + " Listening for ACK...");
+                }
                 feedback_signal = Utils.waitForChirp(Constants.SignalType.Feedback, m_attempt, chirpLoopNumber);
 
                 if (feedback_signal == null) {
-                    MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", getSyncTag() + " Attempt " + chirpLoopNumber + " Failed");
+                    if (MainActivity.activityInstance != null) {
+                        MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", getSyncTag() + " Attempt " + chirpLoopNumber + " Failed");
+                    }
                     chirpLoopNumber++;
                 } else {
-                    MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", getSyncTag() + " Handshake OK");
+                    if (MainActivity.activityInstance != null) {
+                        MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", getSyncTag() + " Handshake OK");
+                    }
                 }
             } while (feedback_signal == null && chirpLoopNumber < 3);
 
@@ -258,7 +278,14 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             if (Constants.SEND_DATA) {
                 appendToLog(Constants.SignalType.Data.toString());
                 if (valid_bins != null && valid_bins.length >= 1 && valid_bins[0] != -1) {
-                    sendData(valid_bins, m_attempt);
+                    if (packetQueue != null && !packetQueue.isEmpty()) {
+                        for (com.example.root.ffttest2.transport.ImagePacket packet : packetQueue) {
+                            sendPacket(packet, valid_bins, m_attempt);
+                            sleep(500); // Inter-packet gap for echoes
+                        }
+                    } else {
+                        sendData(valid_bins, m_attempt);
+                    }
                 }
                 try {
                     Thread.sleep(3000);
@@ -277,7 +304,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 sounding_signal = Utils.waitForChirp(Constants.SignalType.Sounding, m_attempt, chirpLoopNumber);
                 if (sounding_signal == null) return -1;
 
-                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_START", getSyncTag() + " Triggered!");
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_START", getSyncTag() + " Triggered!");
+                }
 
                 double[] seg = Utils.segment(sounding_signal, 0, 24000 - 1);
                 double[] xcorr_out = Utils.xcorr_online(tx_preamble, seg);
@@ -288,7 +317,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 double snrVal = 10 * Math.log10(signalPower / noisePower);
                 if (Double.isNaN(snrVal)) snrVal = 0.0;
 
-                MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_END", getSyncTag() + " SNR:" + String.format("%.2f", snrVal) + "dB | Peak:" + String.format("%.2f", signalPower));
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_END", getSyncTag() + " SNR:" + String.format("%.2f", snrVal) + "dB | Peak:" + String.format("%.2f", signalPower));
+                }
 
                 valid_bins = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int) xcorr_out[1], m_attempt);
                 chirpLoopNumber++;
@@ -300,34 +331,60 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             short[] feedback = FeedbackSignal.encodeFeedbackSignal(valid_bins[0], valid_bins[valid_bins.length - 1],
                     Constants.fbackTime, true, m_attempt);
 
+            if (Constants.sp1 != null) Constants.sp1.release();
             Constants.sp1 = new AudioSpeaker(av, feedback, Constants.fs, 0, feedback.length, false);
 
-            MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_STOP", getSyncTag() + " Sending ACK");
+            if (MainActivity.activityInstance != null) {
+                MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_STOP", getSyncTag() + " Sending ACK");
 
-            // FIXED: Added bobAckSync to ACK_SEND_START
-            MainActivity.activityInstance.logPerf("BOB", "ACK_SEND_START", getSyncTag() + " ID:HANDSHAKE_ACK");
+                // FIXED: Added bobAckSync to ACK_SEND_START
+                MainActivity.activityInstance.logPerf("BOB", "ACK_SEND_START", getSyncTag() + " ID:HANDSHAKE_ACK");
+            }
 
             Constants.sp1.play(Constants.volume);
 
-            // FIXED: Added bobAckSync to SPEAKER_HARDWARE_STOP
-            MainActivity.activityInstance.logPerf("BOB", "SPEAKER_HARDWARE_STOP", getSyncTag() + " ACK Playback Finished");
+            if (MainActivity.activityInstance != null) {
+                // FIXED: Added bobAckSync to SPEAKER_HARDWARE_STOP
+                MainActivity.activityInstance.logPerf("BOB", "SPEAKER_HARDWARE_STOP", getSyncTag() + " ACK Playback Finished");
+            }
 
             int stime = (int) ((feedback.length / (double) Constants.fs) * 1000);
             sleep(stime + Constants.SendPad);
 
-            MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_START", getSyncTag() + " Listening for Data Payload...");
-            double[] data_signal = null;
             if (Constants.SEND_DATA) {
-                data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0);
-            }
-            if (data_signal != null) {
-                Decoder.decode_helper(av, data_signal, valid_bins);
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_START", getSyncTag() + " Listening for Data Payload...");
+                }
+                boolean isImagePacket;
+                do {
+                    double[] data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0);
+                    if (data_signal != null) {
+                        isImagePacket = Decoder.decode_helper(av, data_signal, valid_bins);
+                    } else {
+                        break; // Timeout or stopped
+                    }
+                } while (isImagePacket && Constants.work);
             }
             return 0;
         }
         return 0;
     }
 
+
+    public static void sendPacket(com.example.root.ffttest2.transport.ImagePacket packet, int[] valid_bins, int m_attempt) {
+        short[] bits = SymbolGeneration.getPacketBits(packet);
+        short[] txsig = SymbolGeneration.generateDataSymbols(bits, valid_bins, Constants.data_symreps, true, Constants.SignalType.DataAdapt, m_attempt);
+        
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " Pkt:" + packet.packetIndex + "/" + packet.totalPackets);
+        }
+        if (Constants.sp1 != null) Constants.sp1.release();
+        Constants.sp1 = new AudioSpeaker(MainActivity.av, txsig, Constants.fs, 0, txsig.length, false);
+        Constants.sp1.play(Constants.volume);
+        
+        int duration = (int) (((double) txsig.length / Constants.fs) * 1000);
+        sleep(duration + Constants.SendPad);
+    }
 
     public static void sendData(int[] valid_bins, int m_attempt) {
         send_data_per(valid_bins,m_attempt);
@@ -347,14 +404,21 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         double duration = (double) txsig.length / Constants.fs;
         double bitrate = (double) bits.length / duration;
 
-        MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " ID:" + Constants.messageID);
-        MainActivity.activityInstance.logPerf("ALICE", "DATA_INFO", getSyncTag() + " Bits:" + bitSequence + " | Count:" + bits.length + " | Bitrate:" + String.format("%.2f", bitrate) + "bps");
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " ID:" + Constants.messageID);
+            MainActivity.activityInstance.logPerf("ALICE", "DATA_INFO", getSyncTag() + " Bits:" + bitSequence + " | Count:" + bits.length + " | Bitrate:" + String.format("%.2f", bitrate) + "bps");
+        }
 
+        if (Constants.sp1 != null) Constants.sp1.release();
         Constants.sp1 = new AudioSpeaker(MainActivity.av, txsig, Constants.fs, 0, txsig.length, false);
-        MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Data");
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_START", getSyncTag() + " Playing Data");
+        }
         Constants.sp1.play(Constants.volume);
         //MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_STOP", "Transmission Complete");
-        MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_STOP", getSyncTag() + " Transmission Complete");
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("ALICE", "SPEAKER_HARDWARE_STOP", getSyncTag() + " Transmission Complete");
+        }
     }
 
 

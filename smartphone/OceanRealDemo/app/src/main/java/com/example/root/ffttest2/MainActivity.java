@@ -58,7 +58,7 @@ import java.util.Objects;
 import java.util.Random;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
-    String[] perms = new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
+    String[] perms = new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA};
 
     // --- START: Code for Automation and Logging ---
     private Handler automationHandler = new Handler();
@@ -69,14 +69,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private static SensorManager sensorManager;
     private Sensor accelerometer;
     private Sensor gyroscope;
-    static Activity av;
+    public static Activity av;
     static boolean started=false;
+
+    public static void setActivity(Activity activity) {
+        av = activity;
+        if (activity instanceof MainActivity) {
+            activityInstance = (MainActivity) activity;
+        } else {
+            // If we're in another activity (like DashboardActivity), 
+            // we should still have a way to log if needed, or set activityInstance to null
+            // to avoid calling methods on a stale MainActivity.
+            activityInstance = null; 
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        activityInstance = this;
+        setActivity(this);
         //setContentView(R.layout.activity_main);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -407,6 +419,18 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         Constants.clearButton = (Button) findViewById(R.id.button2);
         Constants.stopButton = (Button) findViewById(R.id.button3);
         Constants.tv6 = (TextView) findViewById(R.id.textView6);
+        
+        Button dashboardButton = (Button) findViewById(R.id.button2); // Hijacking clearButton or adding new one
+        dashboardButton.setText("HYBRID DASHBOARD");
+        dashboardButton.setVisibility(View.VISIBLE);
+        dashboardButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, DashboardActivity.class);
+                startActivity(intent);
+            }
+        });
+        
         av = this;
 
         Constants.sw2.setVisibility(View.GONE);
@@ -455,14 +479,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 if (isChecked) {
                     editor.putString("user", Constants.User.Alice.toString());
                     Constants.user  = Constants.User.Alice;
-                    Constants.sw1.setText(Constants.User.Alice.toString());
-                    Constants.sw2.setEnabled(false);
+                    if (Constants.sw1 != null) Constants.sw1.setText(Constants.User.Alice.toString());
+                    if (Constants.sw2 != null) Constants.sw2.setEnabled(false);
                 }
                 else {
                     editor.putString("user", Constants.User.Bob.toString());
                     Constants.user  = Constants.User.Bob;
-                    Constants.sw1.setText(Constants.User.Bob.toString());
-                    Constants.sw2.setEnabled(true);
+                    if (Constants.sw1 != null) Constants.sw1.setText(Constants.User.Bob.toString());
+                    if (Constants.sw2 != null) Constants.sw2.setEnabled(true);
                 }
                 editor.commit();
             }
@@ -520,7 +544,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     editor.putString("est_sig", Constants.EstSignalType.Symbol.toString());
                     Constants.est_sig = Constants.EstSignalType.Symbol;
                 }
-                Constants.sw6.setText(Constants.est_sig.toString());
+                if (Constants.sw6 != null) Constants.sw6.setText(Constants.est_sig.toString());
                 editor.commit();
             }
         });
@@ -1130,7 +1154,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_FASTEST);
         FullScreencall();
 
-        if (Constants.sw12.isChecked() &&
+        if (Constants.sw12 != null && Constants.sw12.isChecked() &&
             ActivityCompat.checkSelfPermission(av, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(av, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
             !started) {
@@ -1183,7 +1207,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         FileOperations.mkdir(av,Utils.getDirName());
 //        FileOperations.writetofile(av, Constants.ts+"", Utils.genName(Constants.SignalType.Timestamp,0)+".txt");
 
-        Constants.tv6.setText(Utils.trimmed_ts());
+        if (Constants.tv6 != null) {
+            Constants.tv6.setText(Utils.trimmed_ts());
+        }
         Constants.task = new SendChirpAsyncTask(av,Constants.mattempts);
         Constants.task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
@@ -1195,6 +1221,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     public static void stopMethod() {
+        started = false;
         if (Constants.task != null) {
             Constants.task.cancel(true);
         }
@@ -1212,9 +1239,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (Constants._OfflineRecorder!=null) {
             Constants._OfflineRecorder.halt2();
         }
-        if (Constants.sp1!=null && Constants.sp1.track1!=null&&
-                Constants.sp1.track1.getState()== AudioTrack.STATE_INITIALIZED) {
-            Constants.sp1.pause();
+        if (Constants.sp1!=null) {
+            Constants.sp1.release();
         }
         Constants.toggleUI(true);
         started=false;

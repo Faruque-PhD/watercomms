@@ -59,7 +59,7 @@ public class ChannelEstimate {
 
         thresh=Constants.SNR_THRESH2;
 
-        FileOperations.writetofile(MainActivity.av, Constants.snr_method + "",
+        FileOperations.writetofile(av, Constants.snr_method + "",
                 Utils.genName(Constants.SignalType.SNRMethod, m_attempt) + ".txt");
 
         int[] freqs = new int[]{-1,-1};
@@ -81,9 +81,9 @@ public class ChannelEstimate {
             }
         }
 
-        FileOperations.writetofile(MainActivity.av, Utils.trim(Arrays.toString(snrs)),
+        FileOperations.writetofile(av, Utils.trim(Arrays.toString(snrs)),
                 Utils.genName(Constants.SignalType.SNRs, m_attempt) + ".txt");
-        FileOperations.writetofile(MainActivity.av, freqs,
+        FileOperations.writetofile(av, freqs,
                 Utils.genName(Constants.SignalType.FreqEsts, m_attempt) + ".txt");
 
         return selected;
@@ -94,6 +94,7 @@ public class ChannelEstimate {
         av.runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                if (Constants.gview2 == null) return;
                 int cc=Constants.Cp;
                 for (int i = 0; i < Constants.chanest_symreps; i++) {
                     double[] seg = Utils.segment(finalRx_symbols, cc, cc + Constants.Ns - 1);
