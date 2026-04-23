@@ -162,6 +162,18 @@
                 android:textColor="#ffffff"
                 android:textSize="12sp"
                 android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/stopAllButton"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="0.8"
+                android:layout_marginStart="5dp"
+                android:backgroundTint="#b00020"
+                android:text="STOP"
+                android:textColor="#ffffff"
+                android:textSize="12sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout

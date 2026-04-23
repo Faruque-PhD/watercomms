@@ -19,7 +19,7 @@ public class SymbolGeneration {
 
         int siglen = symlen*numDataSyms;
         if (preamble) {
-            siglen += ((Constants.preambleTime/1000.0)*Constants.fs)+Constants.ChirpGap;
+            siglen += PreambleGen.preamble_s().length + Constants.ChirpGap;
         }
         short[] txsig = new short[siglen];
 
@@ -62,9 +62,34 @@ public class SymbolGeneration {
         return txsig;
     }
 
-    public static int[] binFillOrder(int[] valid_carrier) {
+    public static int[] binFillOrder(int[] valid_carrier, int totalBits) {
         int numrounds = 0;
 
+        short[] bits = new short[totalBits];
+
+        int bit_counter = 0;
+        if (valid_carrier.length > 0) {
+            numrounds = (int) Math.ceil((double)totalBits/valid_carrier.length);
+        }
+        int[] out = new int[numrounds+1];
+        out[0]=numrounds;
+        for (int i = 0; i < numrounds; i++) {
+            boolean oneMoreBin = i < totalBits % numrounds;
+
+            int endpoint = (int) (bit_counter + Math.floor(totalBits / (double)numrounds));
+            if (!oneMoreBin) {
+                endpoint -= 1;
+            }
+
+            short[] bits_seg = Utils.segment(bits, bit_counter, endpoint);
+            out[i+1]=bits_seg.length;
+            bit_counter += bits_seg.length;
+        }
+        return out;
+    }
+
+    public static int[] binFillOrder(int[] valid_carrier) {
+        // Legacy support for fixed length signals
         String temp = "";
         for (int i = 0; i < Constants.maxbits; i++) {
             temp+="0";
@@ -73,30 +98,7 @@ public class SymbolGeneration {
         if (Constants.CODING) {
             maxcodedbits = Utils.encode(temp, Constants.cc[0],Constants.cc[1],Constants.cc[2]).length();
         }
-
-        short[] bits = new short[maxcodedbits];
-
-        int bit_counter = 0;
-        if (valid_carrier.length > 0) {
-            numrounds = (int) Math.ceil((double)maxcodedbits/valid_carrier.length);
-        }
-        int[] out = new int[numrounds+1];
-        out[0]=numrounds;
-        for (int i = 0; i < numrounds; i++) {
-            boolean oneMoreBin = i < bits.length % numrounds;
-
-            int endpoint = (int) (bit_counter + Math.floor(bits.length / numrounds));
-            if (!oneMoreBin) {
-                endpoint -= 1;
-            }
-
-            short[] bits_seg = Utils.segment(bits, bit_counter, endpoint);
-
-            short[] pad_bits = Utils.random_array(valid_carrier.length - bits_seg.length);
-            Log.e("symbol", "sym " + i + ": " + bits_seg.length + "," + pad_bits.length);
-            out[i+1]=bits_seg.length;
-        }
-        return out;
+        return binFillOrder(valid_carrier, maxcodedbits);
     }
 
     public static short[] generateDataSymbols(short[] bits, int[] valid_carrier,
@@ -112,7 +114,7 @@ public class SymbolGeneration {
 
         int siglen = symlen*(numrounds+1);
         if (preamble) {
-            siglen += ((Constants.preambleTime/1000.0)*Constants.fs)+Constants.ChirpGap;
+            siglen += PreambleGen.preamble_s().length + Constants.ChirpGap;
         }
         short[] txsig = new short[siglen];
 
@@ -232,7 +234,7 @@ public class SymbolGeneration {
         short[] symbol = generate_helper(
                 training_bits,
                 valid_carrier,
-                1,
+                Constants.data_symreps,
                 Constants.SignalType.DataAdapt);
         return symbol;
     }

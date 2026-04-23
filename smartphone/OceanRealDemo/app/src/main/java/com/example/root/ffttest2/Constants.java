@@ -100,13 +100,13 @@ public class Constants {
     public static int XcorrAmpDiff = 10;
     public static int xcorr_method=2;
 
-    public static int FEEDBACK_SNR_THRESH = 13;
-    public static int CheckSymSNRThresh = 5;
+    public static int FEEDBACK_SNR_THRESH = 5;
+    public static int CheckSymSNRThresh = 2;
 //    public static int FEEDBACK_SNR_THRESH = 5;
 
-    public static int SNR_THRESH1 = 5;
-    public static int SNR_THRESH2 = 8;
-    public static int SNR_THRESH2_2 = 4;
+    public static int SNR_THRESH1 = 3;
+    public static int SNR_THRESH2 = 5;
+    public static int SNR_THRESH2_2 = 3;
 
     static int SyncLag = 2;
     static int WaitForFeedbackTimeDefault = 1;
@@ -453,9 +453,9 @@ public class Constants {
     static boolean feedbackPreamble=false;
     static int preambleStartFreq;
     static int preambleEndFreq;
-    static int chirpPreambleTime = 100; // milliseconds
+    static int chirpPreambleTime = 160; // milliseconds
     static int preambleTime = 160; // milliseconds
-    static int fbackTime = 200; // milliseconds
+    static int fbackTime = 160; // milliseconds
     static boolean DecodeData = false;
     static boolean SEND_DATA = true;
     static int SendPad = 100;
@@ -478,18 +478,18 @@ public class Constants {
         if (Constants.sw1 != null) Constants.sw1.setEnabled(val);
         if (Constants.sw2 != null) Constants.sw2.setEnabled(val);
         if (Constants.sw3 != null) Constants.sw3.setEnabled(val);
-//        if (Constants.sw4 != null) Constants.sw4.setEnabled(val);
-//        if (Constants.sw5 != null) Constants.sw5.setEnabled(val);
-//        if (Constants.sw6 != null) Constants.sw6.setEnabled(val);
+        if (Constants.sw4 != null) Constants.sw4.setEnabled(val);
+        if (Constants.sw5 != null) Constants.sw5.setEnabled(val);
+        if (Constants.sw6 != null) Constants.sw6.setEnabled(val);
         if (Constants.sw7 != null) Constants.sw7.setEnabled(val);
         if (Constants.sw8 != null) Constants.sw8.setEnabled(val);
         if (Constants.sw9 != null) Constants.sw9.setEnabled(val);
         if (Constants.sw10 != null) Constants.sw10.setEnabled(val);
         if (Constants.sw11 != null) Constants.sw11.setEnabled(val);
         if (Constants.sw12 != null) Constants.sw12.setEnabled(val);
-//        if (Constants.startButton != null) Constants.startButton.setEnabled(val);
+        if (Constants.startButton != null) Constants.startButton.setEnabled(val);
         if (Constants.clearButton != null) Constants.clearButton.setEnabled(val);
-//        if (Constants.stopButton != null) Constants.stopButton.setEnabled(!val);
+        if (Constants.stopButton != null) Constants.stopButton.setEnabled(!val);
         if (Constants.et1 != null) Constants.et1.setEnabled(val);
         if (Constants.et2 != null) Constants.et2.setEnabled(val);
         if (Constants.et3 != null) Constants.et3.setEnabled(val);
@@ -735,7 +735,7 @@ public class Constants {
 
     public static void updateNaiser(Context cxt) {
         if (NAISER) {
-            Constants.preambleTime = 195;
+            Constants.preambleTime = 100;
             naiser = FileOperations.readrawasset(cxt, R.raw.naiser3, 1);
 //            preamble_spec1 = FileOperations.readrawasset(cxt, R.raw.real_naiser,1);
 //            preamble_spec2 = FileOperations.readrawasset(cxt, R.raw.imag_naiser,1);
@@ -744,7 +744,7 @@ public class Constants {
 //            preamble_spec1 = FileOperations.readrawasset(cxt, R.raw.real_preamble1, 1);
 //            preamble_spec2 = FileOperations.readrawasset(cxt, R.raw.imag_preamble1, 1);
             if (Constants.exp_num==5) {
-                Constants.preambleTime=200;
+                Constants.preambleTime=100;
             }
             else if (Constants.exp_num==4||Constants.exp_num==3||Constants.exp_num==2||Constants.exp_num==1) {
                 Constants.preambleTime=100;

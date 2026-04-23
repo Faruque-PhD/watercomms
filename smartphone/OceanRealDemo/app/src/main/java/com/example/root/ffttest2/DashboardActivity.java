@@ -14,6 +14,9 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.camera2.interop.Camera2Interop;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
@@ -24,6 +27,7 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 
 import com.example.root.ffttest2.optical.FlashlightController;
+import com.example.root.ffttest2.optical.FourB5B;
 import com.example.root.ffttest2.optical.OpticalDetector;
 import com.example.root.ffttest2.transport.ImageAssembler;
 import com.example.root.ffttest2.transport.ImagePacket;
@@ -40,12 +44,14 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
     
     private ImageView sourceImage, reconstructedImage, channelIcon;
     private TextView statusConsole;
-    private Button igniteButton, listenButton, captureButton, cameraToggleButton;
+    private Button igniteButton, listenButton, captureButton, cameraToggleButton, stopAllButton;
     private PreviewView alignmentPreview;
 
     private boolean isAcoustic = true;
     private boolean isListening = false;
     private boolean isCameraActive = false;
+    private boolean isTransmitting = false;
+    private boolean targetDecodingState = false; // Flag to ensure decoder starts after camera ready
     private Bitmap selectedBitmap;
     
     private FlashlightController flashlightController;
@@ -69,6 +75,7 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
         listenButton = findViewById(R.id.listenButton);
         captureButton = findViewById(R.id.captureButton);
         cameraToggleButton = findViewById(R.id.cameraToggleButton);
+        stopAllButton = findViewById(R.id.stopAllButton);
         alignmentPreview = findViewById(R.id.alignmentPreview);
         circularProgress = findViewById(R.id.circularProgress);
 
@@ -91,6 +98,7 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
         listenButton.setOnClickListener(v -> toggleListen());
         cameraToggleButton.setOnClickListener(v -> toggleCamera());
         captureButton.setOnClickListener(v -> takePhoto());
+        stopAllButton.setOnClickListener(v -> stopEverything());
     }
 
     private void toggleCamera() {
@@ -104,6 +112,22 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
             cameraToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3a86ff")));
             stopCameraPreview();
         }
+    }
+
+    private void stopEverything() {
+        isTransmitting = false; // Stop flashlight loops
+        isListening = false;
+        
+        MainActivity.stopMethod(); // Stop acoustic
+        
+        if (opticalDetector != null) {
+            opticalDetector.setDecoding(false);
+        }
+
+        listenButton.setText(isAcoustic ? "LISTEN" : "START DECODING");
+        listenButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(isAcoustic ? android.graphics.Color.parseColor("#ff5d00") : android.graphics.Color.parseColor("#4caf50")));
+        statusConsole.setText("System Halted.");
+        circularProgress.setVisibility(View.GONE);
     }
 
     private void toggleListen() {
@@ -133,6 +157,7 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
                 MainActivity.startMethod(this);
             } else {
                 statusConsole.setText("OPTICAL DECODER ACTIVE...");
+                targetDecodingState = true;
                 if (opticalDetector != null) {
                     opticalDetector.setDecoding(true);
                 }
@@ -145,11 +170,12 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
             if (isAcoustic) {
                 MainActivity.stopMethod();
             } else {
+                targetDecodingState = false;
                 if (opticalDetector != null) {
                     opticalDetector.setDecoding(false);
                 }
-                circularProgress.setVisibility(View.GONE);
             }
+            circularProgress.setVisibility(View.GONE);
         }
     }
 
@@ -235,7 +261,8 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
         }
 
         Constants.user = Constants.User.Alice;
-        int payloadSize = isAcoustic ? 128 : 512;
+        // Reduced payload size for Optical to improve reliability (10bps is slow/jittery)
+        int payloadSize = isAcoustic ? 128 : 64; 
         List<ImagePacket> packets = ImagePacketizer.packetize(selectedBitmap, (int)System.currentTimeMillis(), payloadSize);
         
         statusConsole.setText("Igniting Transmission...\nPackets: " + packets.size());
@@ -246,6 +273,7 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
         if (isAcoustic) {
             new SendChirpAsyncTask(this, packets).execute();
         } else {
+            isTransmitting = true;
             // Optical transmission - unbind camera first to free flash resources
             ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
             cameraProviderFuture.addListener(() -> {
@@ -253,27 +281,59 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
                     ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                     cameraProvider.unbindAll(); // Crucial for Flashlight access in some devices
                     
+                    // Give the OS a moment to fully release camera hardware
+                    try { Thread.sleep(500); } catch (InterruptedException e) {}
+                    
                     new Thread(() -> {
-                        for (int i = 0; i < packets.size(); i++) {
+                        for (int i = 0; i < packets.size() && isTransmitting; i++) {
                             final int idx = i;
+                            final byte[] packetData = packets.get(i).toBytes();
                             runOnUiThread(() -> {
                                 statusConsole.setText("Optical Sending Pkt: " + (idx+1) + "/" + packets.size());
                                 circularProgress.setProgress(idx + 1);
                             });
-                            flashlightController.transmit(packets.get(i).toBytes(), null);
-                            try { Thread.sleep(1000); } catch (InterruptedException e) {}
+                            
+                            // Using a simple blocking transmit approach for reliability
+                            transmitSync(packetData);
                         }
+                        isTransmitting = false;
                         runOnUiThread(() -> {
                             statusConsole.setText("Optical Transmission Complete.");
                             circularProgress.setVisibility(View.GONE);
                             startCameraPreview(); // Re-bind for alignment
                         });
                     }).start();
-                } catch (Exception e) { e.printStackTrace(); }
+                } catch (Exception e) { 
+                    isTransmitting = false;
+                    e.printStackTrace(); 
+                }
             }, ContextCompat.getMainExecutor(this));
         }
     }
 
+    private void transmitSync(byte[] data) {
+        // Start Preamble (800ms HIGH to wake up receiver and stabilize threshold)
+        flashlightController.setFlashlight(true);
+        try { Thread.sleep(800); } catch (InterruptedException e) {}
+        flashlightController.setFlashlight(false);
+        try { Thread.sleep(200); } catch (InterruptedException e) {} // Guard interval
+
+        // Data Bits
+        for (byte b : data) {
+            if (!isTransmitting) break;
+            int encoded = FourB5B.encode(b);
+            for (int i = 9; i >= 0; i--) {
+                if (!isTransmitting) break;
+                boolean bit = ((encoded >> i) & 1) == 1;
+                flashlightController.setFlashlight(bit);
+                try { Thread.sleep(200); } catch (InterruptedException e) {} // 5 Hz
+            }
+        }
+        flashlightController.setFlashlight(false);
+        try { Thread.sleep(900); } catch (InterruptedException e) {} // STOP signal (900ms LOW)
+    }
+
+    @ExperimentalCamera2Interop
     private void startCameraPreview() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             statusConsole.setText("Camera Permission Required!");
@@ -290,27 +350,58 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
                 imageCapture = new ImageCapture.Builder().build();
 
                 opticalDetector = new OpticalDetector(new OpticalDetector.OpticalListener() {
-                    private java.io.ByteArrayOutputStream opticalBuffer = new java.io.ByteArrayOutputStream();
+                    private StringBuilder bitStream = new StringBuilder();
 
                     @Override
                     public void onBitDetected(boolean bit) {
+                        runOnUiThread(() -> {
+                            statusConsole.setText("Detecting Bits...");
+                        });
                     }
 
                     @Override
                     public void onByteReceived(byte b) {
-                        opticalBuffer.write(b);
-                        byte[] currentData = opticalBuffer.toByteArray();
-                        
-                        try {
-                            com.example.root.ffttest2.transport.ImagePacket packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(currentData);
-                            if (packet != null) {
-                                runOnUiThread(() -> {
-                                    statusConsole.setText("Optical Packet Rcvd: " + packet.packetIndex + "/" + packet.totalPackets);
-                                    imageAssembler.addPacket(packet);
-                                });
-                                opticalBuffer.reset(); 
+                        // Convert byte to 8-bit string and append
+                        String s = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0');
+                        bitStream.append(s);
+
+                        // Keep buffer length limited (approx 5 packets)
+                        if (bitStream.length() > 5000) bitStream.delete(0, 2000);
+
+                        // MAGIC HEADER: 'OR' (0x4F, 0x52) -> 01001111 01010010
+                        String magic = "0100111101010010";
+                        int idx = bitStream.indexOf(magic);
+
+                        if (idx != -1) {
+                            int totalPacketBits = (ImagePacket.HEADER_SIZE + (isAcoustic ? 128 : 64)) * 8;
+                            if (bitStream.length() >= idx + totalPacketBits) {
+                                String packetBits = bitStream.substring(idx, idx + totalPacketBits);
+                                byte[] data = bitStringToBytes(packetBits);
+                                try {
+                                    ImagePacket packet = ImagePacket.fromBytes(data);
+                                    if (packet != null) {
+                                        android.util.Log.i("OpticalDetector", "VALID PACKET! Pkt: " + packet.packetIndex);
+                                        runOnUiThread(() -> {
+                                            statusConsole.setText("Optical Packet Rcvd: " + packet.packetIndex + "/" + packet.totalPackets);
+                                            imageAssembler.addPacket(packet);
+                                        });
+                                        bitStream.delete(0, idx + totalPacketBits);
+                                    } else {
+                                        bitStream.delete(0, idx + 8); // Skip this magic and look for next
+                                    }
+                                } catch (Exception e) {
+                                    bitStream.delete(0, idx + 8);
+                                }
                             }
-                        } catch (Exception e) { }
+                        }
+                    }
+
+                    private byte[] bitStringToBytes(String s) {
+                        byte[] b = new byte[s.length() / 8];
+                        for (int i = 0; i < b.length; i++) {
+                            b[i] = (byte) Integer.parseInt(s.substring(i * 8, i * 8 + 8), 2);
+                        }
+                        return b;
                     }
 
                     @Override
@@ -322,25 +413,37 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
                         runOnUiThread(() -> {
                             if (state.equals("RECEIVING")) {
                                 circularProgress.setVisibility(View.VISIBLE);
-                                circularProgress.setMax(256); // Estimate for status bar
-                                circularProgress.setProgress(progress % 256);
+                                circularProgress.setIndeterminate(true); // Spin while receiving bits
                                 statusConsole.setText("Decoding Bits: " + progress);
                             } else if (state.equals("SYNCING")) {
+                                circularProgress.setVisibility(View.VISIBLE);
+                                circularProgress.setIndeterminate(false);
+                                circularProgress.setMax(3);
+                                circularProgress.setProgress(progress);
                                 statusConsole.setText("Syncing Optical Signal: " + progress + "/3");
                             } else {
+                                circularProgress.setVisibility(View.GONE);
                                 statusConsole.setText("Optical Status: " + state);
                             }
                         });
                     }
                 });
 
-                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build();
+                // Apply the pending state (crucial for race condition fix)
+                opticalDetector.setDecoding(targetDecodingState);
+
+                ImageAnalysis.Builder analysisBuilder = new ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST);
+
+                // Lock Auto-Exposure (AE) to prevent brightness drift
+                Camera2Interop.Extender<ImageAnalysis> analysisExtender = new Camera2Interop.Extender<>(analysisBuilder);
+                // analysisExtender.setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_LOCK, true);
+
+                ImageAnalysis imageAnalysis = analysisBuilder.build();
                 imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), opticalDetector);
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis, imageCapture);
+                Camera camera = cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis, imageCapture);
 
             } catch (ExecutionException | InterruptedException e) {
                 e.printStackTrace();

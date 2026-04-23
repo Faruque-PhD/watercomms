@@ -60,7 +60,7 @@ public class Modulation {
             double[] phase = phase(divval);
 
             int counter = 0;
-            for (int j = valid_bins[0]; j < valid_bins[1]; j++) {
+            for (int j = valid_bins[0]; j <= valid_bins[1]; j++) {
                 boolean b1 = phase[j] >= Math.PI/2;
                 boolean b2 = phase[j] <= -Math.PI/2;
                 if (b1|b2) {

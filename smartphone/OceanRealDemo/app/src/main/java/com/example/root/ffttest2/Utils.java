@@ -881,25 +881,12 @@ public class Utils {
             len = (int)(ChirpSamples+Constants.ChirpGap+((fbackTime/1000.0)*Constants.fs));
         }
         else if (sigType.equals(Constants.SignalType.DataRx)) {
-            MAX_WINDOWS = 2;
-            if (Constants.exp_num==1 || Constants.exp_num == 2) {
-                timeout = 11;
-            }
-            else if (Constants.exp_num==3 || Constants.exp_num == 4) {
-                timeout = 4;
-            }
-            else if (Constants.exp_num==5) {
-                if (Constants.Ns==960||Constants.Ns==1920) {
-                    timeout = 3;
-                }
-                else if (Constants.Ns==4800) {
-                    timeout=6;
-                }
-                else if (Constants.Ns==9600) {
-                    timeout=6;
-                }
-            }
-            len = ChirpSamples+Constants.ChirpGap+((Constants.Ns+Constants.Cp)*32);
+            MAX_WINDOWS = 12; // 12 windows * 0.5s = 6 seconds per capture cycle
+            timeout = 30;    // Absolute timeout of 30 seconds
+            
+            // Increased to 25 seconds of samples (48000 * 25)
+            // This ensures we capture the full 11-12 second transmission of 548 symbols
+            len = Constants.fs * 25; 
         }
 
         int N = (int)(timeout*(Constants.fs/Constants.RecorderStepSize));
@@ -994,8 +981,8 @@ public class Utils {
 
                     if(sampleHistory.size() >= 6){
                         sampleHistory.remove(0);
-                        valueHistory.remove(0);
-                        idxHistory.remove(0);
+                        if (valueHistory.size() > 0) valueHistory.remove(0);
+                        if (idxHistory.size() > 0) idxHistory.remove(0);
                     }
                 }
             }

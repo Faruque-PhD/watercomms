@@ -33,10 +33,14 @@ public class Decoder {
             MainActivity.activityInstance.logPerf("BOB", "PROC_LATENCY", "Filter:" + (tFiltered - tStart) + "ms");
         }
 
-        valid_bins[0] = valid_bins[0] + Constants.nbin1_default;
-        valid_bins[1] = valid_bins[1] + Constants.nbin1_default;
+        // Fixed: Use local variables to avoid modifying the original valid_bins array
+        int bin1 = valid_bins[0] + Constants.nbin1_default;
+        int bin2 = valid_bins[1] + Constants.nbin1_default;
 
-        int[] binFillOrder = SymbolGeneration.binFillOrder(Utils.arange(valid_bins[0], valid_bins[1]));
+        // Image packets are typically 64 bytes (512 bits) + 9 byte header = 584 bits.
+        // We need to determine the fill order based on the actual expected bit count.
+        int expectedBits = 600; // Safe upper bound for a 64-byte packet + header
+        int[] binFillOrder = SymbolGeneration.binFillOrder(Utils.arange(bin1, bin2), expectedBits);
 
         int ptime = (int) ((Constants.preambleTime / 1000.0) * Constants.fs);
         int start = ptime + Constants.ChirpGap;
@@ -44,8 +48,8 @@ public class Decoder {
         double[] rx_pilots = Utils.segment(data, start + Constants.Cp, start + Constants.Cp + Constants.Ns - 1);
         start = start + Constants.Cp + Constants.Ns;
 
-        double[] tx_pilots = Utils.convert(SymbolGeneration.getTrainingSymbol(Utils.arange(valid_bins[0], valid_bins[1])));
-        tx_pilots = Utils.segment(tx_pilots, Constants.Cp, Constants.Cp + Constants.Ns - 1);
+        double[] tx_pilots = Utils.convert(SymbolGeneration.getTrainingSymbol(Utils.arange(bin1, bin2)));
+        tx_pilots = Utils.segment(tx_pilots, Constants.Cp, Constants.Ns + Constants.Cp - 1);
 
         double[][] tx_spec = Utils.fftcomplexoutnative_double(tx_pilots, tx_pilots.length);
         double[][] rx_spec = Utils.fftcomplexoutnative_double(rx_pilots, rx_pilots.length);
@@ -62,7 +66,18 @@ public class Decoder {
 
         long tFFTStart = SystemClock.elapsedRealtime();
         for (int i = 0; i < numsyms; i++) {
-            double[] sym = Utils.segment(data, start + Constants.Cp, start + Constants.Cp + Constants.Ns - 1);
+            int symStart = start + Constants.Cp;
+            int symEnd = start + Constants.Cp + Constants.Ns - 1;
+            
+            // BOUNDS CHECK: Ensure we have enough data for the next symbol
+            if (symEnd >= data.length) {
+                if (MainActivity.activityInstance != null) {
+                    MainActivity.activityInstance.logPerf("BOB", "DECODE_ERROR", "Signal Truncated at symbol " + i + " (DataLen:" + data.length + ")");
+                }
+                break;
+            }
+
+            double[] sym = Utils.segment(data, symStart, symEnd);
             start = start + Constants.Cp + Constants.Ns;
 
             double[][] sym_spec = Utils.fftcomplexoutnative_double(sym, sym.length);
@@ -74,7 +89,7 @@ public class Decoder {
             MainActivity.activityInstance.logPerf("BOB", "PROC_LATENCY", "FFT_Total:" + (tFFTEnd - tFFTStart) + "ms | Syms:" + numsyms);
         }
 
-        short[][] bits = Modulation.pskdemod_differential(symbols, valid_bins);
+        short[][] bits = Modulation.pskdemod_differential(symbols, new int[]{bin1 - Constants.nbin1_default, bin2 - Constants.nbin1_default});
         long tDemod = SystemClock.elapsedRealtime();
         if (MainActivity.activityInstance != null) {
             MainActivity.activityInstance.logPerf("BOB", "PROC_LATENCY", "Demod:" + (tDemod - tFFTEnd) + "ms");

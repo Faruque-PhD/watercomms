@@ -12,14 +12,27 @@ import java.util.List;
 public class ImagePacketizer {
     public static final int DEFAULT_PAYLOAD_SIZE = 128; // Standard for acoustic channel
     public static final int JPEG_QUALITY = 50; // Balance between size and quality
+    public static final int RESIZE_LIMIT = 256; // Max dimension for optical/acoustic image transfer
 
     /**
      * Compresses the bitmap and splits it into packets.
      */
     public static List<ImagePacket> packetize(Bitmap bitmap, int imageId, int payloadSize) {
-        // Step 1: Compress to JPEG
+        // Step 0: Resize for transmission efficiency
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        if (width > RESIZE_LIMIT || height > RESIZE_LIMIT) {
+            float scale = Math.min((float) RESIZE_LIMIT / width, (float) RESIZE_LIMIT / height);
+            bitmap = Bitmap.createScaledBitmap(bitmap, Math.round(width * scale), Math.round(height * scale), true);
+        }
+
+        // Step 1: Compress to WebP (lossy) if available, otherwise JPEG
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, JPEG_QUALITY, stream);
+        } else {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream);
+        }
         byte[] imageData = stream.toByteArray();
 
         // Step 2: Fragment the data

@@ -1270,7 +1270,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     public static void unreg(Activity av) {
-        sensorManager.unregisterListener((MainActivity)av);
+        if (sensorManager != null && av instanceof android.hardware.SensorEventListener) {
+            sensorManager.unregisterListener((android.hardware.SensorEventListener) av);
+        }
     }
 
     // --- START: Research Logging Method ---

@@ -72,15 +72,19 @@ public class FeedbackSignal {
     }
 
     public static short[] encodeFeedbackSignal(int fbegin, int fend, int len_ms, boolean preamble, int m_attempt) {
-        int len = (int)((len_ms/1000.0)*Constants.fs);
+        short[] preamble_sig = preamble ? PreambleGen.preamble_s() : new short[0];
+        int preambleLen = preamble_sig.length;
+        int feedbackLenSamples = (int)((len_ms/1000.0)*Constants.fs);
+        
+        int len = feedbackLenSamples;
         if (preamble) {
-            len += ((Constants.preambleTime/1000.0)*Constants.fs)+Constants.ChirpGap;
+            len += preambleLen + Constants.ChirpGap;
         }
         short[] txsig = new short[len];
 
         int counter = 0;
         if (preamble) {
-            for (Short s : PreambleGen.preamble_s()) {
+            for (short s : preamble_sig) {
                 txsig[counter++] = s;
             }
             counter += Constants.ChirpGap;
@@ -103,6 +107,7 @@ public class FeedbackSignal {
         }
 
         short[] feedback = new short[fbackLen];
+        int copyStart = counter;
         for (int i = 0; i < feedback.length; i++) {
             feedback[i] = txsig[counter++];
         }

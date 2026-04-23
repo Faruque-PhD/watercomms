@@ -7,10 +7,13 @@ import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Robust OpticalDetector with intense logging for debugging.
+ * Robust OpticalDetector using Adaptive Thresholding and Edge-List Decoding.
+ * Inspired by UFlash.
  */
 public class OpticalDetector implements ImageAnalysis.Analyzer {
     private static final String TAG = "OpticalDetector";
@@ -22,22 +25,31 @@ public class OpticalDetector implements ImageAnalysis.Analyzer {
         void onStateChanged(String state, int progress);
     }
 
-    private static final long BIT_DURATION_MS = 100;
-    private static final double ON_THRESHOLD_RATIO = 1.08; // 8% above baseline - more sensitive
+    private static final long BIT_DURATION_MS = 200; // 5 Hz
+    private static final long PREAMBLE_MIN_MS = 600; // UFlash uses 800ms
+    private static final long STOP_MIN_MS = 800;     // UFlash uses 900ms
 
     private final OpticalListener listener;
-    private double baselineIntensity = -1;
-    private double alpha = 0.05; 
     private boolean isDecoding = false;
 
-    private enum State { IDLE, SYNCING, RECEIVING }
+    // Adaptive Thresholding
+    private final LinkedList<Double> intensityWindow = new LinkedList<>();
+    private static final int WINDOW_SIZE = 150;
+    private double currentThreshold = -1;
+
+    // Decoding State
+    private enum State { IDLE, RECEIVING }
     private State currentState = State.IDLE;
     
-    private long startTime = 0;
-    private int bitCount = 0;
-    private int currentByte = 0;
-    private final List<Long> preamblePulseTimes = new ArrayList<>();
-    private long lastPulseTime = 0;
+    private boolean lastLevel = false;
+    private long lastEdgeTime = 0;
+    private final List<Edge> edges = new ArrayList<>();
+
+    private static class Edge {
+        long timestamp;
+        boolean level; // The level AFTER this edge
+        Edge(long t, boolean l) { this.timestamp = t; this.level = l; }
+    }
 
     public OpticalDetector(OpticalListener listener) {
         this.listener = listener;
@@ -45,17 +57,15 @@ public class OpticalDetector implements ImageAnalysis.Analyzer {
 
     public void setDecoding(boolean decoding) {
         this.isDecoding = decoding;
-        Log.d(TAG, "Decoding set to: " + decoding);
         if (!decoding) reset();
     }
 
     public void reset() {
-        Log.d(TAG, "Resetting state");
+        Log.d(TAG, "Resetting decoder");
         currentState = State.IDLE;
-        bitCount = 0;
-        currentByte = 0;
-        preamblePulseTimes.clear();
-        baselineIntensity = -1;
+        intensityWindow.clear();
+        edges.clear();
+        currentThreshold = -1;
         if (listener != null) listener.onStateChanged("IDLE", 0);
     }
 
@@ -71,115 +81,180 @@ public class OpticalDetector implements ImageAnalysis.Analyzer {
             return;
         }
 
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        byte[] data = new byte[buffer.remaining()];
-        buffer.get(data);
+        // Get Luminance (Y) plane
+        ImageProxy.PlaneProxy yPlane = image.getPlanes()[0];
+        ByteBuffer buffer = yPlane.getBuffer();
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int pixelStride = yPlane.getPixelStride();
+        int rowStride = yPlane.getRowStride();
 
-        double avgIntensity = calculateAverageLuminance(data);
+        double avgIntensity = calculateROIIntensity(buffer, width, height, pixelStride, rowStride);
+        
         if (listener != null) listener.onIntensityChanged(avgIntensity);
 
-        processOpticalSignal(avgIntensity);
+        updateThreshold(avgIntensity);
+        if (currentThreshold != -1) {
+            processSample(avgIntensity > currentThreshold);
+        }
+
         image.close();
     }
 
-    private synchronized void processOpticalSignal(double intensity) {
+    private double calculateROIIntensity(ByteBuffer buffer, int width, int height, int pixelStride, int rowStride) {
+        // Center 40% ROI
+        int roiW = (int) (width * 0.4);
+        int roiH = (int) (height * 0.4);
+        int startX = (width - roiW) / 2;
+        int startY = (height - roiH) / 2;
+
+        long total = 0;
+        int count = 0;
+        byte[] rowData = new byte[roiW * pixelStride];
+
+        for (int y = startY; y < startY + roiH; y += 2) { // Subsample rows for speed
+            buffer.position(y * rowStride + startX * pixelStride);
+            buffer.get(rowData);
+            for (int x = 0; x < rowData.length; x += pixelStride * 2) {
+                total += (rowData[x] & 0xFF);
+                count++;
+            }
+        }
+        return (double) total / count;
+    }
+
+    private void updateThreshold(double intensity) {
+        intensityWindow.add(intensity);
+        if (intensityWindow.size() > WINDOW_SIZE) {
+            intensityWindow.removeFirst();
+        }
+
+        if (intensityWindow.size() >= WINDOW_SIZE / 2) {
+            List<Double> sorted = new ArrayList<>(intensityWindow);
+            Collections.sort(sorted);
+            double min = sorted.get(0);
+            double max = sorted.get(sorted.size() - 1);
+            
+            if (max - min > 12) { // Minimum contrast required
+                currentThreshold = (min + max) / 2.0;
+            }
+        }
+    }
+
+    private void processSample(boolean level) {
         long now = System.currentTimeMillis();
 
-        if (baselineIntensity == -1) {
-            baselineIntensity = intensity;
-            Log.d(TAG, "Baseline initialized: " + baselineIntensity);
-            return;
-        }
+        if (level != lastLevel) {
+            long duration = now - lastEdgeTime;
+            
+            if (currentState == State.IDLE) {
+                // Look for HIGH preamble
+                if (!level && duration >= PREAMBLE_MIN_MS) {
+                    Log.d(TAG, "Preamble detected! Duration: " + duration);
+                    currentState = State.RECEIVING;
+                    edges.clear();
+                    // Level is now LOW after preamble HIGH
+                    edges.add(new Edge(now, false));
+                    if (listener != null) listener.onStateChanged("RECEIVING", 0);
+                }
+            } else if (currentState == State.RECEIVING) {
+                edges.add(new Edge(now, level));
+                if (listener != null) listener.onStateChanged("RECEIVING", edges.size());
+            }
 
-        boolean isOn = intensity > (baselineIntensity * ON_THRESHOLD_RATIO);
+            lastLevel = level;
+            lastEdgeTime = now;
+        } else {
+            // No change. Check for STOP signal or timeouts.
+            long duration = now - lastEdgeTime;
+            if (currentState == State.RECEIVING && !level && duration >= STOP_MIN_MS) {
+                Log.d(TAG, "STOP signal detected! Duration: " + duration);
+                decodeEdges();
+                reset();
+            } else if (currentState == State.RECEIVING && duration > 10000) {
+                Log.d(TAG, "Receiving timeout");
+                reset();
+            }
+        }
+    }
+
+    private void decodeEdges() {
+        if (edges.isEmpty()) return;
+
+        StringBuilder bits = new StringBuilder();
+        long lastT = lastEdgeTime; // The time of the STOP edge (transition to LOW)
         
-        // Log intensity occasionally for debugging
-        if (now % 500 < 50) {
-            Log.d(TAG, String.format("Intensity: %.2f | Baseline: %.2f | IsOn: %b | State: %s", 
-                intensity, baselineIntensity, isOn, currentState));
+        // We need to work backwards or forwards. Let's work forwards from the first edge after preamble.
+        // The first edge in the list is the transition from HIGH (preamble) to the first bit(s).
+        
+        long tRef = edges.get(0).timestamp;
+        boolean currentVal = edges.get(0).level; // Level after the first data-carrying edge
+        
+        for (int i = 1; i < edges.size(); i++) {
+            long tNext = edges.get(i).timestamp;
+            long duration = tNext - tRef;
+            int bitCount = (int) Math.round((double) duration / BIT_DURATION_MS);
+            
+            for (int b = 0; b < bitCount; b++) {
+                bits.append(currentVal ? "1" : "0");
+                if (listener != null) listener.onBitDetected(currentVal);
+            }
+            
+            tRef = tNext;
+            currentVal = edges.get(i).level;
         }
 
-        if (!isOn) {
-            baselineIntensity = (1 - alpha) * baselineIntensity + alpha * intensity;
+        // Handle the last stretch before the STOP edge
+        long duration = lastEdgeTime - tRef;
+        int bitCount = (int) Math.round((double) duration / BIT_DURATION_MS);
+        for (int b = 0; b < bitCount; b++) {
+            bits.append(currentVal ? "1" : "0");
+            if (listener != null) listener.onBitDetected(currentVal);
         }
 
-        switch (currentState) {
-            case IDLE:
-                if (isOn) {
-                    Log.d(TAG, "Sync pulse 1 detected!");
-                    currentState = State.SYNCING;
-                    preamblePulseTimes.clear();
-                    preamblePulseTimes.add(now);
-                    lastPulseTime = now;
-                    if (listener != null) listener.onStateChanged("SYNCING", 1);
-                }
-                break;
-
-            case SYNCING:
-                if (isOn && (now - lastPulseTime > 150)) {
-                    preamblePulseTimes.add(now);
-                    lastPulseTime = now;
-                    Log.d(TAG, "Sync pulse " + preamblePulseTimes.size() + " detected!");
-                    if (listener != null) listener.onStateChanged("SYNCING", preamblePulseTimes.size());
-                    
-                    if (preamblePulseTimes.size() >= 3) {
-                        Log.d(TAG, "Sync complete! Moving to RECEIVING");
-                        currentState = State.RECEIVING;
-                        startTime = now + 300; 
-                        bitCount = 0;
-                        currentByte = 0;
-                        if (listener != null) listener.onStateChanged("RECEIVING", 0);
-                    }
-                }
-                if (now - lastPulseTime > 3000) {
-                    Log.d(TAG, "Sync timeout");
-                    reset();
-                }
-                break;
-
-            case RECEIVING:
-                long elapsed = now - startTime;
-                if (elapsed < 0) return;
-
-                int targetBitIndex = (int) (elapsed / BIT_DURATION_MS);
-                
-                // Sample if we've reached a new bit window
-                if (targetBitIndex > bitCount) {
-                    while (bitCount < targetBitIndex) {
-                        Log.d(TAG, "Sampling Bit " + bitCount + ": " + (isOn ? "1" : "0"));
-                        sampleBit(isOn);
-                    }
-                }
-
-                if (bitCount >= 1024 || (now - lastPulseTime > 8000)) {
-                    Log.d(TAG, "Transmission ended or timeout");
-                    reset();
-                }
-                if (isOn) lastPulseTime = now;
-                break;
-        }
+        Log.d(TAG, "Decoded bitstream: " + bits.toString());
+        processBitstream(bits.toString());
     }
 
-    private void sampleBit(boolean isOn) {
-        currentByte = (currentByte << 1) | (isOn ? 1 : 0);
-        bitCount++;
-        if (listener != null) {
-            listener.onBitDetected(isOn);
-            listener.onStateChanged("RECEIVING", bitCount);
-        }
-
-        if (bitCount % 8 == 0) {
-            if (listener != null) listener.onByteReceived((byte) (currentByte & 0xFF));
-            currentByte = 0;
-        }
+    private void processBitstream(String bitstream) {
+        // Try both normal and inverted bitstreams
+        String inverted = bitstream.replace('0', 'x').replace('1', '0').replace('x', '1');
+        
+        decodeWithBestShift(bitstream, "Normal");
+        decodeWithBestShift(inverted, "Inverted");
     }
 
-    private double calculateAverageLuminance(byte[] yData) {
-        long total = 0;
-        int step = Math.max(1, yData.length / 1024);
-        for (int i = 0; i < yData.length; i += step) {
-            total += (yData[i] & 0xFF);
+    private void decodeWithBestShift(String stream, String label) {
+        int bestShift = 0;
+        int maxValid = -1;
+        List<Byte> bestDecoded = new ArrayList<>();
+
+        for (int shift = 0; shift < 10; shift++) {
+            List<Byte> currentDecoded = new ArrayList<>();
+            int validCount = 0;
+            for (int i = shift; i + 10 <= stream.length(); i += 10) {
+                try {
+                    String symbolStr = stream.substring(i, i + 10);
+                    int symbol = Integer.parseInt(symbolStr, 2);
+                    int decoded = FourB5B.decode(symbol);
+                    if (decoded != -1) {
+                        validCount++;
+                        currentDecoded.add((byte) decoded);
+                    }
+                } catch (Exception e) {}
+            }
+            if (validCount > maxValid) {
+                maxValid = validCount;
+                bestShift = shift;
+                bestDecoded = currentDecoded;
+            }
         }
-        return (double) total / (yData.length / (double)step);
+
+        if (maxValid > 0) {
+            Log.d(TAG, label + " best shift: " + bestShift + " with " + maxValid + " valid symbols");
+            for (byte b : bestDecoded) {
+                if (listener != null) listener.onByteReceived(b);
+            }
+        }
     }
 }

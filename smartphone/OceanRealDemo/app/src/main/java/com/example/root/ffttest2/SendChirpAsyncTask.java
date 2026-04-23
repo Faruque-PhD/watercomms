@@ -99,8 +99,14 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
         Constants.sp1=null;
         Constants._OfflineRecorder = null;
-        Constants.user  = Constants.User.Bob;
-        MainActivity.startMethod(av);
+        
+        // Reset state so UI can be interacted with again
+        Constants.work = false;
+        Constants.toggleUI(true);
+        
+        if (MainActivity.activityInstance != null) {
+            MainActivity.activityInstance.logPerf("SYSTEM", "TASK_END", getSyncTag() + " AsyncTask Finished Cleanly");
+        }
     }
 
     @Override
@@ -349,7 +355,8 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             }
 
             int stime = (int) ((feedback.length / (double) Constants.fs) * 1000);
-            sleep(stime + Constants.SendPad);
+            // Increased to 1.5s to ensure Bob's hardware is stable and Alice is ready
+            sleep(stime + 1500); 
 
             if (Constants.SEND_DATA) {
                 if (MainActivity.activityInstance != null) {
@@ -372,6 +379,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
 
     public static void sendPacket(com.example.root.ffttest2.transport.ImagePacket packet, int[] valid_bins, int m_attempt) {
+        // Give Bob 1.5s to start recording and hardware to stabilize
+        sleep(1500); 
+
         short[] bits = SymbolGeneration.getPacketBits(packet);
         short[] txsig = SymbolGeneration.generateDataSymbols(bits, valid_bins, Constants.data_symreps, true, Constants.SignalType.DataAdapt, m_attempt);
         
@@ -408,6 +418,9 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " ID:" + Constants.messageID);
             MainActivity.activityInstance.logPerf("ALICE", "DATA_INFO", getSyncTag() + " Bits:" + bitSequence + " | Count:" + bits.length + " | Bitrate:" + String.format("%.2f", bitrate) + "bps");
         }
+
+        // Give Bob 1.5s to start recording and hardware to stabilize
+        sleep(1500); 
 
         if (Constants.sp1 != null) Constants.sp1.release();
         Constants.sp1 = new AudioSpeaker(MainActivity.av, txsig, Constants.fs, 0, txsig.length, false);

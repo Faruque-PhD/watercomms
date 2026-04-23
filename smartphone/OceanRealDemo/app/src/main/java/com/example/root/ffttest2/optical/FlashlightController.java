@@ -11,7 +11,7 @@ import android.os.Looper;
  * Controls the phone's flashlight for OOK (On-Off Keying) transmission.
  */
 public class FlashlightController {
-    private static final long BIT_DURATION_MS = 100; // Duration for one bit (10Hz)
+    private static final long BIT_DURATION_MS = 200; // 5 Hz
     
     private Context context;
     private CameraManager cameraManager;
@@ -37,18 +37,25 @@ public class FlashlightController {
         isTransmitting = true;
 
         new Thread(() -> {
-            // Start Preamble (3 rapid flashes to wake up receiver)
-            sendPreamble();
+            // Start Preamble (800ms HIGH to wake up receiver and stabilize threshold)
+            setFlashlight(true);
+            sleep(800);
+            setFlashlight(false);
+            sleep(200); // Guard interval
 
             for (byte b : data) {
-                for (int i = 7; i >= 0; i--) {
-                    boolean bit = ((b >> i) & 1) == 1;
+                if (!isTransmitting) break;
+                int encoded = FourB5B.encode(b);
+                for (int i = 9; i >= 0; i--) {
+                    if (!isTransmitting) break;
+                    boolean bit = ((encoded >> i) & 1) == 1;
                     setFlashlight(bit);
                     sleep(BIT_DURATION_MS);
                 }
             }
 
             setFlashlight(false);
+            sleep(900); // STOP signal
             isTransmitting = false;
             if (onComplete != null) {
                 handler.post(onComplete);
@@ -56,17 +63,8 @@ public class FlashlightController {
         }).start();
     }
 
-    private void sendPreamble() {
-        for (int i = 0; i < 3; i++) {
-            setFlashlight(true);
-            sleep(100);
-            setFlashlight(false);
-            sleep(100);
-        }
-        sleep(300); // Guard interval after preamble
-    }
-
-    private void setFlashlight(boolean on) {
+    public void setFlashlight(boolean on) {
+        if (cameraId == null) return;
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 cameraManager.setTorchMode(cameraId, on);
