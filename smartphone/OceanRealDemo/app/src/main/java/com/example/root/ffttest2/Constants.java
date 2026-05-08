@@ -105,7 +105,7 @@ public class Constants {
 //    public static int FEEDBACK_SNR_THRESH = 5;
 
     public static int SNR_THRESH1 = 3;
-    public static int SNR_THRESH2 = 5;
+    public static int SNR_THRESH2 = 0;
     public static int SNR_THRESH2_2 = 3;
 
     static int SyncLag = 2;
@@ -126,6 +126,8 @@ public class Constants {
     static TextToSpeech tts = null;
     static boolean DIFFERENTIAL=true;
     static boolean INTERLEAVE=true;
+    public static boolean USE_PILOTS = true;
+    public static int PILOT_SPACING = 5;
     static float FreAdaptScaleFactor;
 
     static long StartingTimestamp;
@@ -470,7 +472,7 @@ public class Constants {
     static boolean CHECK_SYM = false;
     static int messageID=-1;
     static HashMap<Integer,String>mmap=new HashMap<>();
-    static int[] cc = new int[]{7,5,10};
+    static int[] cc = new int[]{121,91,7};
     static boolean SPEECH_IN=false;
     static boolean SPEECH_OUT=false;
 

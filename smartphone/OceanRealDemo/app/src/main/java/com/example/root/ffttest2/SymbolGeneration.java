@@ -64,12 +64,17 @@ public class SymbolGeneration {
 
     public static int[] binFillOrder(int[] valid_carrier, int totalBits) {
         int numrounds = 0;
+        int data_carriers_per_symbol = valid_carrier.length;
+        if (Constants.USE_PILOTS) {
+            int pilots_per_sym = (int) Math.ceil((double) valid_carrier.length / Constants.PILOT_SPACING);
+            data_carriers_per_symbol = valid_carrier.length - pilots_per_sym;
+        }
 
         short[] bits = new short[totalBits];
 
         int bit_counter = 0;
-        if (valid_carrier.length > 0) {
-            numrounds = (int) Math.ceil((double)totalBits/valid_carrier.length);
+        if (data_carriers_per_symbol > 0) {
+            numrounds = (int) Math.ceil((double)totalBits/data_carriers_per_symbol);
         }
         int[] out = new int[numrounds+1];
         out[0]=numrounds;
@@ -105,8 +110,16 @@ public class SymbolGeneration {
                                               int symreps, boolean preamble, Constants.SignalType sigType,
                                               int m_attempt) {
         int numrounds = 0;
+        int data_per_sym = valid_carrier.length;
         if (valid_carrier.length > 0) {
-            numrounds = (int) Math.ceil((double)bits.length/valid_carrier.length);
+            if (Constants.USE_PILOTS) {
+                int pilots_per_sym = (int) Math.ceil((double) valid_carrier.length / Constants.PILOT_SPACING);
+                data_per_sym = valid_carrier.length - pilots_per_sym;
+                // Calculate numrounds based on reduced data capacity
+                numrounds = (int) Math.ceil((double) bits.length / (double) data_per_sym);
+            } else {
+                numrounds = (int) Math.ceil((double) bits.length / (double) valid_carrier.length);
+            }
         }
         Log.e("sym",bits.length+","+valid_carrier.length+","+numrounds+","+Constants.Ns+","+Constants.subcarrier_number_default);
 
@@ -131,7 +144,11 @@ public class SymbolGeneration {
         // add training symbol
         short[][] bit_list = new short[numrounds+1][valid_carrier.length];
 
-        short[] training_bits = Utils.segment(Constants.pn60_bits, 0, valid_carrier.length - 1);
+        // Safe training bits generation: Wrap around if valid_carrier is longer than pn60_bits
+        short[] training_bits = new short[valid_carrier.length];
+        for (int i = 0; i < valid_carrier.length; i++) {
+            training_bits[i] = Constants.pn60_bits[i % Constants.pn60_bits.length];
+        }
 
         short[] symbol = generate_helper(
                 training_bits,
@@ -154,21 +171,36 @@ public class SymbolGeneration {
         String numberOfDataBits = "";
 
         for (int i = 0; i < numrounds; i++) {
-            boolean oneMoreBin = i < bits.length%numrounds;
-
-            int endpoint = (int)(bit_counter + Math.floor(bits.length/numrounds));
-            if (!oneMoreBin) {
-                endpoint -= 1;
+            short[] bits_seg;
+            if (Constants.USE_PILOTS) {
+                int endpoint = Math.min(bit_counter + data_per_sym, bits.length);
+                bits_seg = Utils.segment(bits, bit_counter, endpoint - 1);
+            } else {
+                boolean oneMoreBin = i < bits.length % numrounds;
+                int endpoint = (int) (bit_counter + Math.floor(bits.length / numrounds));
+                if (!oneMoreBin) {
+                    endpoint -= 1;
+                }
+                bits_seg = Utils.segment(bits, bit_counter, endpoint);
             }
-
-            short[] bits_seg = Utils.segment(bits,bit_counter,endpoint);
+            
             numberOfDataBits += bits_seg.length+", ";
             bitsWithoutPadding += Utils.trim(Arrays.toString(bits_seg))+", ";
 
-            short[] pad_bits = Utils.random_array(valid_carrier.length-bits_seg.length);
-            Log.e("symbol", "sym "+i+": "+bits_seg.length+","+pad_bits.length);
+            short[] tx_bits = new short[valid_carrier.length];
+            int data_idx = 0;
+            for (int j = 0; j < valid_carrier.length; j++) {
+                if (Constants.USE_PILOTS && (j % Constants.PILOT_SPACING == 0)) {
+                    tx_bits[j] = 0; // Pilot bit (results in phase 0 difference)
+                } else {
+                    if (data_idx < bits_seg.length) {
+                        tx_bits[j] = bits_seg[data_idx++];
+                    } else {
+                        tx_bits[j] = (short) (Math.random() > 0.5 ? 1 : 0); // Padding
+                    }
+                }
+            }
 
-            short[] tx_bits = Utils.concat_short(bits_seg,pad_bits);
             bitsWithPadding += Utils.trim(Arrays.toString(tx_bits))+", ";
 
             if (Constants.INTERLEAVE) {

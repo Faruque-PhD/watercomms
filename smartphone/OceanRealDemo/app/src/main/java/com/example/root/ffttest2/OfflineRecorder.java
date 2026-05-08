@@ -29,7 +29,7 @@ public class OfflineRecorder extends Thread {
     private int total_samples_recorded = 0;
     
     // Circular Buffer
-    private static final int BUFFER_SIZE = 48000 * 5; // 5 seconds of audio
+    private static final int BUFFER_SIZE = 48000 * 10; // 10 seconds of audio for better stability
     private short[] circularBuffer = new short[BUFFER_SIZE];
     private final ReentrantLock bufferLock = new ReentrantLock();
 
@@ -80,7 +80,10 @@ public class OfflineRecorder extends Thread {
         this.start();
     }
 
-    public short[] get_FIFO() {
+    /**
+     * Optimized: Returns a primitive double array directly to avoid boxing overhead.
+     */
+    public double[] get_FIFO() {
         int targetSize = Constants.RecorderStepSize;
         
         // Wait for enough data
@@ -94,11 +97,11 @@ public class OfflineRecorder extends Thread {
 
         if (!recording && getAvailableData() < targetSize) return null;
 
-        short[] return_array = new short[targetSize];
+        double[] return_array = new double[targetSize];
         bufferLock.lock();
         try {
             for (int i = 0; i < targetSize; i++) {
-                return_array[i] = circularBuffer[(read_pointer + i) % BUFFER_SIZE];
+                return_array[i] = (double) circularBuffer[(read_pointer + i) % BUFFER_SIZE];
             }
             read_pointer = (read_pointer + targetSize) % BUFFER_SIZE;
         } finally {

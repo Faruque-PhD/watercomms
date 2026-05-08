@@ -1,5 +1,7 @@
 package com.example.root.ffttest2;
 
+import android.util.Log;
+
 public class Modulation {
     public static short[] pskdemod_test(double[][] fft_spectrum, int[] valid_carrier) {
         short[] out = new short[valid_carrier.length];
@@ -51,16 +53,59 @@ public class Modulation {
     // number of symbols / real/imaginary / data bits
     public static short[][] pskdemod_differential(double[][][] symbols, int[] valid_bins) {
         int numbins = valid_bins[1]-valid_bins[0]+1;
+        int dataBins = numbins;
+        if (Constants.USE_PILOTS) {
+            int pilots = (int) Math.ceil((double) numbins / Constants.PILOT_SPACING);
+            dataBins = numbins - pilots;
+        }
         // num symbols / num bins
-        short[][] bits = new short[symbols.length-1][numbins];
+        short[][] bits = new short[symbols.length-1][dataBins];
         for (int i = 0; i < symbols.length-1; i++) {
             double[][] symbol1 = symbols[i+1];
             double[][] symbol2 = symbols[i];
+            
+            // SAFETY: Ensure symbols are not null before calling JNI
+            if (symbol1 == null || symbol2 == null) {
+                Log.e("Modulation", "NULL symbol at index " + i + " or " + (i+1));
+                continue;
+            }
+
             double[][] divval = Utils.dividenative(symbol1,symbol2);
+            if (divval == null) {
+                Log.e("Modulation", "dividenative returned NULL for index " + i);
+                continue;
+            }
+            
             double[] phase = phase(divval);
+
+            // --- CONTINUOUS PHASE TRACKING (CPE Correction) ---
+            if (Constants.USE_PILOTS) {
+                double totalPhaseErr = 0;
+                int pilotCount = 0;
+                for (int j = 0; j < numbins; j++) {
+                    if (j % Constants.PILOT_SPACING == 0) {
+                        totalPhaseErr += phase[valid_bins[0] + j];
+                        pilotCount++;
+                    }
+                }
+                if (pilotCount > 0) {
+                    double avgPhaseErr = totalPhaseErr / pilotCount;
+                    for (int j = valid_bins[0]; j <= valid_bins[1]; j++) {
+                        phase[j] -= avgPhaseErr;
+                        // Wrap phase to [-PI, PI]
+                        while (phase[j] > Math.PI) phase[j] -= 2 * Math.PI;
+                        while (phase[j] < -Math.PI) phase[j] += 2 * Math.PI;
+                    }
+                }
+            }
 
             int counter = 0;
             for (int j = valid_bins[0]; j <= valid_bins[1]; j++) {
+                // Skip pilot bins when extracting bits
+                if (Constants.USE_PILOTS && ((j - valid_bins[0]) % Constants.PILOT_SPACING == 0)) {
+                    continue;
+                }
+                
                 boolean b1 = phase[j] >= Math.PI/2;
                 boolean b2 = phase[j] <= -Math.PI/2;
                 if (b1|b2) {

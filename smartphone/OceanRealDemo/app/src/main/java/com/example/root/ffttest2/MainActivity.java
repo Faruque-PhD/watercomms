@@ -1215,9 +1215,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     public void onstop(View v) {
+        isAutomationRunning = false;
+        if (automationHandler != null) {
+            automationHandler.removeCallbacks(autoSendRunnable);
+        }
         stopMethod();
-        Constants.user  = Constants.User.Bob;
-        startMethod(av);
     }
 
     public static void stopMethod() {
@@ -1229,13 +1231,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Constants.timer.cancel();
         }
 
-//        sensorManager.unregisterListener(this);
+        if (activityInstance != null) {
+            activityInstance.isAutomationRunning = false;
+            if (activityInstance.automationHandler != null) {
+                activityInstance.automationHandler.removeCallbacks(activityInstance.autoSendRunnable);
+            }
+        }
+
         Constants.work=false;
         Log.e("asdf","onstop");
         Constants.sensorFlag=false;
-//        if (Constants.acc != null && Constants.acc.size() > 0) {
-//            FileOperations.writeSensors(this, Constants.ts+".txt");
-//        }
         if (Constants._OfflineRecorder!=null) {
             Constants._OfflineRecorder.halt2();
         }

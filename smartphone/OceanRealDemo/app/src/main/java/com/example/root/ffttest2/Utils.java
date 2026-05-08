@@ -390,6 +390,7 @@ public class Utils {
     }
 
     public static Double[] convert2(short[] s) {
+        if (s == null) return null;
         Double[] out = new Double[s.length];
         for (int i = 0; i < s.length; i++) {
             out[i] = (double)s[i];
@@ -758,7 +759,8 @@ public class Utils {
                 maxidx = idx;
             }
             if (legit2[0] > 0) {
-                return new double[]{corr[cands[j]], idx, legit2[1]};
+                // FIXED: Return the refined peak index from Naiser instead of the rough rough index
+                return new double[]{corr[cands[j]], legit2[0], legit2[1]};
             }
         }
         return new double[]{-1,maxidx,max};
@@ -841,12 +843,23 @@ public class Utils {
     }
 
     public static double[] waitForChirp(Constants.SignalType sigType, int m_attempt, int chirpLoopNumber) {
+        return waitForChirp(sigType, m_attempt, chirpLoopNumber, 0, false);
+    }
+
+    public static double[] waitForChirp(Constants.SignalType sigType, int m_attempt, int chirpLoopNumber, int expectedLen) {
+        return waitForChirp(sigType, m_attempt, chirpLoopNumber, expectedLen, false);
+    }
+
+    public static double[] waitForChirp(Constants.SignalType sigType, int m_attempt, int chirpLoopNumber, int expectedLen, boolean persistent) {
         String filename = Utils.genName(sigType, m_attempt, chirpLoopNumber);
         Log.e("fifo",filename);
 
-        Constants._OfflineRecorder = new OfflineRecorder(
-                MainActivity.av, Constants.fs, filename);
-        Constants._OfflineRecorder.start2();
+        if (!persistent || Constants._OfflineRecorder == null || !Constants._OfflineRecorder.recording) {
+            if (Constants._OfflineRecorder != null) Constants._OfflineRecorder.halt2();
+            Constants._OfflineRecorder = new OfflineRecorder(
+                    MainActivity.av, Constants.fs, filename);
+            Constants._OfflineRecorder.start2();
+        }
 
         int MAX_WINDOWS = 0;
 
@@ -881,35 +894,39 @@ public class Utils {
             len = (int)(ChirpSamples+Constants.ChirpGap+((fbackTime/1000.0)*Constants.fs));
         }
         else if (sigType.equals(Constants.SignalType.DataRx)) {
-            MAX_WINDOWS = 12; // 12 windows * 0.5s = 6 seconds per capture cycle
-            timeout = 30;    // Absolute timeout of 30 seconds
-            
-            // Increased to 25 seconds of samples (48000 * 25)
-            // This ensures we capture the full 11-12 second transmission of 548 symbols
-            len = Constants.fs * 25; 
+            MAX_WINDOWS = 2;
+            if (expectedLen > 0) {
+                len = expectedLen;
+            } else {
+                int dataLenSymbols = 2500; // Increased to accommodate worst-case 1-carrier transmission
+                len = PreambleGen.preamble_s().length + Constants.ChirpGap + (Constants.Ns + Constants.Cp) * dataLenSymbols;
+            }
+            // CRITICAL: Increased padding to 30.0s to allow Alice's sleeps and slow hardware
+            timeout = (len / (double)Constants.fs) + 30.0; 
         }
 
         int N = (int)(timeout*(Constants.fs/Constants.RecorderStepSize));
         double[] tx_preamble = PreambleGen.preamble_d();
 
-        ArrayList<Double[]> sampleHistory = new ArrayList<>();
+        ArrayList<double[]> sampleHistory = new ArrayList<>();
         ArrayList<Double> valueHistory = new ArrayList<>();
         ArrayList<Double> idxHistory = new ArrayList<>();
         int synclag = 12000;
-        double[] sounding_signal = new double[]{};
-        sounding_signal=new double[(MAX_WINDOWS+1)*Constants.RecorderStepSize];
+        int bufferSize = Math.max((MAX_WINDOWS + 2) * Constants.RecorderStepSize, len + synclag + Constants.RecorderStepSize * 2);
+        double[] sounding_signal = new double[bufferSize];
+        
+        Log.d("waitForChirp", "Starting " + sigType + " search, timeout: " + timeout + "s, bufferSize: " + bufferSize);
         Log.e("len","sig length "+sounding_signal.length+","+sigType.toString());
         boolean valid_signal = false;
-//        boolean getOneMoreFlag = false;
         int sounding_signal_counter=0;
-        for (int i = 0; i < N; i++) {
-            Double[] rec = Utils.convert2(Constants._OfflineRecorder.get_FIFO());
-//            Log.e("timer1",m_attempt+","+rec.length+","+i+","+N+","+(System.currentTimeMillis()-t1)+"");
+        for (int i = 0; i < N || numWindowsLeft > 0; i++) {
+            if (!Constants.work || Constants._OfflineRecorder == null) return null;
+            double[] rec = Constants._OfflineRecorder.get_FIFO();
+            if (rec == null) return null;
 
             if (sigType.equals(Constants.SignalType.Sounding)||
                     sigType.equals(Constants.SignalType.Feedback)||
                     sigType.equals(Constants.SignalType.DataRx)) {
-//                Log.e("fifo","loop "+i);
 
                 if (i<MAX_WINDOWS) {
                     sampleHistory.add(rec);
@@ -917,20 +934,20 @@ public class Utils {
                 }
                 else {
                     if (numWindowsLeft==0) {
-                        double[] out = null;
-                        out = Utils.concat(sampleHistory.get(sampleHistory.size() - 1), rec);
+                        double[] out = Utils.concat(sampleHistory.get(sampleHistory.size() - 1), rec);
+                        double[] filt = Utils.filter(Utils.copyArray(out));
 
-                        double[] filt = Utils.copyArray(out);
-                        filt = Utils.filter(filt);
-
-                        //value,idx
+                        // value, idx
                         double[] xcorr_out = Utils.xcorr_online(tx_preamble, filt);
-
-                        long t1 = System.currentTimeMillis();
                         Utils.log(String.format("Listening... (%.2f)",xcorr_out[2]));
+                        
+                        // AGGRESSIVE LOGGING: Track signal levels even if detection fails
+                        if (sigType.equals(Constants.SignalType.DataRx) && i % 4 == 0) {
+                            Log.v("BOB_DataWait", String.format("Loop %d: Peak=%.2f, RefIndex=%.1f, Confidence=%.2f", i, xcorr_out[0], xcorr_out[1], xcorr_out[2]));
+                        }
+
                         if (MainActivity.activityInstance != null) {
-                            // Replace 'receivedID' with whatever variable holds the detected signal number
-                            MainActivity.activityInstance.logResearchEvent("RECEIVE_TRIGGER",  "Preamble", "Corr:" + xcorr_out[2]      /*"ID_", "Metadata:..."*/);
+                            MainActivity.activityInstance.logResearchEvent("RECEIVE_TRIGGER",  "Preamble", "Corr:" + xcorr_out[2]);
                         }
 
                         sampleHistory.add(rec);
@@ -938,42 +955,35 @@ public class Utils {
                         idxHistory.add(xcorr_out[1]);
 
                         if (xcorr_out[0] != -1) {
-                            if (xcorr_out[1] + len + synclag > Constants.RecorderStepSize*MAX_WINDOWS) {
-                                Log.e("copy","one more flag "+xcorr_out[1]+","+(xcorr_out[1] + len + synclag));
-
-                                numWindowsLeft = MAX_WINDOWS-1;
-
-//                                Log.e("copy","copying "+out[t_idx]+","+out[t_idx+1]+","+out[t_idx+2]+","+out[t_idx+3]+","+out[t_idx+4]);
-                                for (int j = (int)xcorr_out[1]; j < out.length; j++) {
-                                    sounding_signal[sounding_signal_counter++]=out[j];
+                            int currentPos = (int)xcorr_out[1];
+                            int totalNeededAfterStart = len + synclag;
+                            int samplesInOutputSoFar = out.length - currentPos;
+                            
+                            // Copy initial segment from 'out'
+                            for (int j = currentPos; j < out.length; j++) {
+                                if (sounding_signal_counter < sounding_signal.length) {
+                                    sounding_signal[sounding_signal_counter++] = out[j];
                                 }
+                            }
 
-                                Log.e("copy", "copy ("+xcorr_out[1]+","+filt.length+") to ("+sounding_signal_counter+")");
+                            if (totalNeededAfterStart > samplesInOutputSoFar) {
+                                int samplesRemaining = totalNeededAfterStart - samplesInOutputSoFar;
+                                numWindowsLeft = (int) Math.ceil((double)samplesRemaining / Constants.RecorderStepSize);
+                                Log.e("copy", "copy ("+currentPos+","+out.length+") to ("+sounding_signal_counter+") | windowsLeft: " + numWindowsLeft);
                             } else {
-                                Log.e("copy","good! "+filt.length+","+xcorr_out[1]+","+filt.length);
-//                                Utils.log("good");
-                                int counter=0;
-                                for (int k = (int) xcorr_out[1]; k < out.length; k++) {
-                                    sounding_signal[counter++] = out[k];
-                                }
-//                                sounding_signal = Utils.segment(filt, (int) xcorr_out[1], filt.length - 1);
                                 valid_signal = true;
                                 break;
                             }
                         }
                     }
                     else if (sounding_signal_counter>0){
-//                        Utils.log("another window");
-                        Log.e("copy","another window from "+sounding_signal_counter+","+(sounding_signal_counter+rec.length)+","+sounding_signal.length);
-
-//                        double[] filt2 = Utils.copyArray2(rec);
-//                        filt2 = Utils.filter(filt2);
-
                         for (int j = 0; j < rec.length; j++) {
-                            sounding_signal[sounding_signal_counter++]=rec[j];
+                            if (sounding_signal_counter < sounding_signal.length) {
+                                sounding_signal[sounding_signal_counter++] = rec[j];
+                            }
                         }
                         numWindowsLeft -= 1;
-                        if (numWindowsLeft==0){
+                        if (numWindowsLeft<=0){
                             valid_signal=true;
                             break;
                         }
@@ -988,9 +998,16 @@ public class Utils {
             }
         }
 
-        Constants._OfflineRecorder.halt2();
+        if (!persistent) {
+            Constants._OfflineRecorder.halt2();
+        }
 
         if (valid_signal) {
+            // Optimization: Don't filter huge data buffer here; Decoder will do it.
+            // This prevents redundant expensive FIR filtering on millions of samples.
+            if (sigType.equals(Constants.SignalType.DataRx)) {
+                return sounding_signal;
+            }
             return Utils.filter(sounding_signal);
         }
         return null;

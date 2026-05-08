@@ -51,7 +51,14 @@ public class ImagePacket implements Serializable {
     public static ImagePacket fromBytes(byte[] data) {
         if (data.length < HEADER_SIZE) return null;
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        if (buffer.get() != MAGIC_1 || buffer.get() != MAGIC_2) return null;
+        
+        byte m1 = buffer.get();
+        byte m2 = buffer.get();
+        
+        // Robust check: Allow 1-bit difference (Hamming distance <= 1)
+        if (countSetBits((byte)(m1 ^ MAGIC_1)) > 1 || countSetBits((byte)(m2 ^ MAGIC_2)) > 1) {
+            return null;
+        }
 
         ImagePacket packet = new ImagePacket();
         packet.type = buffer.get();
@@ -60,9 +67,20 @@ public class ImagePacket implements Serializable {
         packet.totalPackets = buffer.getShort() & 0xFFFF;
         
         int payloadLen = data.length - HEADER_SIZE;
+        if (payloadLen < 0) return null;
         packet.payload = new byte[payloadLen];
         buffer.get(packet.payload);
         
         return packet;
+    }
+
+    private static int countSetBits(byte n) {
+        int count = 0;
+        int val = n & 0xFF;
+        while (val > 0) {
+            val &= (val - 1);
+            count++;
+        }
+        return count;
     }
 }

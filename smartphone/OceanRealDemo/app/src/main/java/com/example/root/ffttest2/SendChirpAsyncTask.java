@@ -87,6 +87,12 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 // --- END: Code for Automation and Logging ---
 
     @Override
+    protected void onCancelled(Void result) {
+        super.onCancelled(result);
+        onPostExecute(null);
+    }
+
+    @Override
     protected void onPostExecute(Void unused) {
         super.onPostExecute(unused);
 
@@ -103,6 +109,17 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
         // Reset state so UI can be interacted with again
         Constants.work = false;
         Constants.toggleUI(true);
+
+        if (av instanceof DashboardActivity) {
+            av.runOnUiThread(() -> {
+                android.widget.ProgressBar pb = av.findViewById(R.id.circularProgress);
+                if (pb != null) pb.setVisibility(android.view.View.GONE);
+            });
+        }
+
+        if (Constants.statusConsole != null) {
+            Constants.statusConsole.setText("Session Complete.");
+        }
         
         if (MainActivity.activityInstance != null) {
             MainActivity.activityInstance.logPerf("SYSTEM", "TASK_END", getSyncTag() + " AsyncTask Finished Cleanly");
@@ -138,7 +155,7 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                     Utils.genName(Constants.SignalType.FlipSyms, 0) + ".txt");
         }
 
-        for (int i = 0; i < num_measurements; i++) {
+        for (int i = 0; i < num_measurements && Constants.work && !isCancelled(); i++) {
             Log.e("timer","work "+i);
             int flag = work(i);
             updateTimer((i+1)+"");
@@ -266,15 +283,32 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
                 if (feedback_signal == null) {
                     if (MainActivity.activityInstance != null) {
-                        MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", getSyncTag() + " Attempt " + chirpLoopNumber + " Failed");
+                        MainActivity.activityInstance.logPerf("ALICE", "TIMEOUT_RETRY", getSyncTag() + " Attempt " + chirpLoopNumber + " Failed (No ACK)");
                     }
                     chirpLoopNumber++;
                 } else {
                     if (MainActivity.activityInstance != null) {
-                        MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", getSyncTag() + " Handshake OK");
+                        MainActivity.activityInstance.logPerf("ALICE", "ACK_RCV_SUCCESS", getSyncTag() + " ACK Preamble Detected!");
+                    }
+                    // Extract bins immediately to see if it's valid
+                    double[] seg_ack = Utils.segment(feedback_signal, 0, 24000 - 1);
+                    double[] xcorr_ack = Utils.xcorr_online(tx_preamble, seg_ack);
+                    int[] temp_bins = FeedbackSignal.extractSignalHelper(feedback_signal, (int) xcorr_ack[1], m_attempt);
+                    
+                    if (temp_bins != null && temp_bins.length >= 1 && temp_bins[0] != -1) {
+                        Log.i("ALICE", "Handshake SUCCESS! Bins: " + Arrays.toString(temp_bins));
+                    } else {
+                        Log.w("ALICE", "ACK detected but Bins extraction FAILED. Retrying...");
+                        feedback_signal = null; // Force retry
+                        chirpLoopNumber++;
                     }
                 }
-            } while (feedback_signal == null && chirpLoopNumber < 3);
+            } while (Constants.work && !isCancelled() && feedback_signal == null && chirpLoopNumber < 3);
+
+            if (!Constants.work || isCancelled() || feedback_signal == null) {
+                Log.e("ALICE", "Handshake failed after 3 attempts or stopped.");
+                return 0; // Abort
+            }
 
             // --- FUNCTIONAL LOGIC: BINS EXTRACTION ---
             double[] seg = Utils.segment(feedback_signal, 0, 24000 - 1);
@@ -284,10 +318,12 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             if (Constants.SEND_DATA) {
                 appendToLog(Constants.SignalType.Data.toString());
                 if (valid_bins != null && valid_bins.length >= 1 && valid_bins[0] != -1) {
+                    Log.i("ALICE", "Starting data transmission loop. Packets in queue: " + (packetQueue != null ? packetQueue.size() : 0));
                     if (packetQueue != null && !packetQueue.isEmpty()) {
                         for (com.example.root.ffttest2.transport.ImagePacket packet : packetQueue) {
+                            if (!Constants.work || isCancelled()) break;
                             sendPacket(packet, valid_bins, m_attempt);
-                            sleep(500); // Inter-packet gap for echoes
+                            sleep(1000); // Increased inter-packet gap for echoes and hardware sync
                         }
                     } else {
                         sendData(valid_bins, m_attempt);
@@ -307,7 +343,8 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             double[] sounding_signal = null;
 
             do {
-                sounding_signal = Utils.waitForChirp(Constants.SignalType.Sounding, m_attempt, chirpLoopNumber);
+                // Persistent = true to keep mic alive for subsequent ACK and Data
+                sounding_signal = Utils.waitForChirp(Constants.SignalType.Sounding, m_attempt, chirpLoopNumber, 0, true);
                 if (sounding_signal == null) return -1;
 
                 if (MainActivity.activityInstance != null) {
@@ -327,13 +364,22 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                     MainActivity.activityInstance.logPerf("BOB", "PREAMBLE_RCV_END", getSyncTag() + " SNR:" + String.format("%.2f", snrVal) + "dB | Peak:" + String.format("%.2f", signalPower));
                 }
 
-                valid_bins = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int) xcorr_out[1], m_attempt);
+                int[] valid_bins_indices = ChannelEstimate.extractSignal_withsymbol_helper(av, sounding_signal, (int) xcorr_out[1], m_attempt);
+                if (valid_bins_indices != null && valid_bins_indices.length >= 2) {
+                    valid_bins = new int[valid_bins_indices.length];
+                    for (int i = 0; i < valid_bins_indices.length; i++) {
+                        valid_bins[i] = Constants.valid_carrier_default[valid_bins_indices[i]];
+                    }
+                    Log.i("BOB", "Handshake detected valid bins (absolute): " + Arrays.toString(valid_bins));
+                }
+                
                 chirpLoopNumber++;
 
                 if (!Constants.work) return -1;
             } while (valid_bins == null || valid_bins.length == 0 || valid_bins[0] == -1);
 
             // --- BOB SEND ACK WITH TIMESTAMPS ---
+            // Pass absolute bin numbers to encodeFeedbackSignal
             short[] feedback = FeedbackSignal.encodeFeedbackSignal(valid_bins[0], valid_bins[valid_bins.length - 1],
                     Constants.fbackTime, true, m_attempt);
 
@@ -362,15 +408,61 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
                 if (MainActivity.activityInstance != null) {
                     MainActivity.activityInstance.logPerf("BOB", "MIC_HARDWARE_START", getSyncTag() + " Listening for Data Payload...");
                 }
-                boolean isImagePacket;
+                
                 do {
-                    double[] data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0);
-                    if (data_signal != null) {
-                        isImagePacket = Decoder.decode_helper(av, data_signal, valid_bins);
+                    // Bob waits for data chirps repeatedly to capture all packets in the transmission
+                    
+                    // Calculate expected length for DataRx based on valid_bins to avoid long unnecessary waits
+                    // Image packets are typically 1096 bits (uncoded). Coded bits = (1096 + K-1) * 2
+                    int uncodedBits = 1096; 
+                    int K = Constants.cc[2];
+                    int expectedBits = (uncodedBits + K - 1) * 2;
+                    
+                    // valid_bins is [start_idx, end_idx] as returned by ChannelEstimate
+                    int numCarriers = (valid_bins != null && valid_bins.length >= 2) ? (valid_bins[valid_bins.length-1] - valid_bins[0] + 1) : 60;
+                    if (numCarriers <= 0) numCarriers = 1;
+                    
+                    int numrounds;
+                    if (Constants.USE_PILOTS) {
+                        int pilots_per_sym = (int) Math.ceil((double) numCarriers / Constants.PILOT_SPACING);
+                        int data_per_sym = numCarriers - pilots_per_sym;
+                        numrounds = (int) Math.ceil((double) expectedBits / (double) data_per_sym);
                     } else {
-                        break; // Timeout or stopped
+                        numrounds = (int) Math.ceil((double) expectedBits / numCarriers);
                     }
-                } while (isImagePacket && Constants.work);
+                    
+                    // dataLen = Preamble + Gap + TrainingSymbol + DataSymbols
+                    // Each symbol is (Ns + Cp). symreps is typically 1 for data.
+                    int dataLen = PreambleGen.preamble_s().length + Constants.ChirpGap + 
+                                  (Constants.Ns + Constants.Cp) * (numrounds + 1);
+                    
+                    Log.d("BOB", "Expecting " + numrounds + " data symbols on " + numCarriers + " carriers. Expected samples: " + dataLen);
+                    
+                    // Use persistent = true to keep the microphone running between packets
+                    double[] data_signal = Utils.waitForChirp(Constants.SignalType.DataRx, m_attempt, 0, dataLen, true);
+                    if (data_signal != null) {
+                        Log.d("BOB", "Data signal detected, decoding...");
+                        boolean success = Decoder.decode_helper(av, data_signal, valid_bins);
+                        Log.d("BOB", "Decoding finished, success: " + success);
+                    } else {
+                        // waitForChirp returned null (likely timeout or user stopped)
+                        Log.d("BOB", "waitForChirp(DataRx) returned null. Timeout or stopped. Break.");
+                        break; 
+                    }
+                    
+                    // Check if image is complete to exit early
+                    if (Decoder.getImageAssembler() != null && Decoder.getImageAssembler().getCompletionPercentage() >= 100) {
+                        Log.d("BOB", "Image complete! Exiting reception loop.");
+                        break;
+                    }
+                    
+                } while (Constants.work);
+                
+                // Cleanup: Stop recorder now that session is over
+                if (Constants._OfflineRecorder != null) {
+                    Constants._OfflineRecorder.halt2();
+                    Constants._OfflineRecorder = null;
+                }
             }
             return 0;
         }
@@ -379,11 +471,31 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
 
 
     public static void sendPacket(com.example.root.ffttest2.transport.ImagePacket packet, int[] valid_bins, int m_attempt) {
-        // Give Bob 1.5s to start recording and hardware to stabilize
-        sleep(1500); 
+        // Give Bob 2.0s to start recording and hardware to stabilize
+        sleep(2000); 
+
+        if (MainActivity.av instanceof DashboardActivity) {
+            final DashboardActivity da = (DashboardActivity) MainActivity.av;
+            da.runOnUiThread(() -> {
+                android.widget.ProgressBar pb = da.findViewById(R.id.circularProgress);
+                if (pb != null) {
+                    pb.setProgress(packet.packetIndex + 1);
+                }
+                if (Constants.statusConsole != null) {
+                    Constants.statusConsole.setText("Acoustic Sending Pkt: " + (packet.packetIndex + 1) + "/" + packet.totalPackets);
+                }
+            });
+        }
 
         short[] bits = SymbolGeneration.getPacketBits(packet);
-        short[] txsig = SymbolGeneration.generateDataSymbols(bits, valid_bins, Constants.data_symreps, true, Constants.SignalType.DataAdapt, m_attempt);
+        
+        // Apply FEC encoding for robustness
+        StringBuilder bitStr = new StringBuilder();
+        for (short b : bits) bitStr.append(b);
+        String coded = Utils.encode(bitStr.toString(), Constants.cc[0], Constants.cc[1], Constants.cc[2]);
+        short[] encodedBits = Utils.convert(coded);
+
+        short[] txsig = SymbolGeneration.generateDataSymbols(encodedBits, valid_bins, Constants.data_symreps, true, Constants.SignalType.DataAdapt, m_attempt);
         
         if (MainActivity.activityInstance != null) {
             MainActivity.activityInstance.logPerf("ALICE", "DATA_SEND_START", getSyncTag() + " Pkt:" + packet.packetIndex + "/" + packet.totalPackets);
@@ -419,8 +531,8 @@ public class SendChirpAsyncTask extends AsyncTask<Void, Void, Void> {
             MainActivity.activityInstance.logPerf("ALICE", "DATA_INFO", getSyncTag() + " Bits:" + bitSequence + " | Count:" + bits.length + " | Bitrate:" + String.format("%.2f", bitrate) + "bps");
         }
 
-        // Give Bob 1.5s to start recording and hardware to stabilize
-        sleep(1500); 
+        // Give Bob 2.0s to start recording and hardware to stabilize
+        sleep(2000); 
 
         if (Constants.sp1 != null) Constants.sp1.release();
         Constants.sp1 = new AudioSpeaker(MainActivity.av, txsig, Constants.fs, 0, txsig.length, false);

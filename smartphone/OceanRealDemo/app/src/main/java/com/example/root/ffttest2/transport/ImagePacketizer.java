@@ -10,15 +10,15 @@ import java.util.List;
  * Splits a Bitmap into ImagePackets for transmission.
  */
 public class ImagePacketizer {
-    public static final int DEFAULT_PAYLOAD_SIZE = 128; // Standard for acoustic channel
-    public static final int JPEG_QUALITY = 50; // Balance between size and quality
-    public static final int RESIZE_LIMIT = 256; // Max dimension for optical/acoustic image transfer
+    public static final int DEFAULT_PAYLOAD_SIZE = 128;
+    public static final int JPEG_QUALITY = 10; // Ultra-low quality for 100bps channels
+    public static final int RESIZE_LIMIT = 32; // 32x32 is the sweet spot for recognition
 
     /**
      * Compresses the bitmap and splits it into packets.
      */
     public static List<ImagePacket> packetize(Bitmap bitmap, int imageId, int payloadSize) {
-        // Step 0: Resize for transmission efficiency
+        // Step 0: Resize for transmission efficiency (Strict 32x32 for Color)
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
         if (width > RESIZE_LIMIT || height > RESIZE_LIMIT) {
@@ -26,10 +26,13 @@ public class ImagePacketizer {
             bitmap = Bitmap.createScaledBitmap(bitmap, Math.round(width * scale), Math.round(height * scale), true);
         }
 
-        // Step 1: Compress to WebP (lossy) if available, otherwise JPEG
+        // Step 1: Compress to WebP (preserving color)
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, JPEG_QUALITY, stream);
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+            // Fallback for older but still modern versions
+            bitmap.compress(Bitmap.CompressFormat.WEBP, JPEG_QUALITY, stream);
         } else {
             bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream);
         }
@@ -42,8 +45,9 @@ public class ImagePacketizer {
         for (int i = 0; i < totalPackets; i++) {
             int start = i * payloadSize;
             int end = Math.min(start + payloadSize, imageData.length);
-            byte[] chunk = new byte[end - start];
-            System.arraycopy(imageData, start, chunk, 0, end - start);
+            int currentChunkSize = end - start;
+            byte[] chunk = new byte[currentChunkSize];
+            System.arraycopy(imageData, start, chunk, 0, currentChunkSize);
 
             ImagePacket packet = new ImagePacket(
                 (byte) 0, // Data type

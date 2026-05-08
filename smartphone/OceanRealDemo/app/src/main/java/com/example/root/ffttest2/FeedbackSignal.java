@@ -90,8 +90,9 @@ public class FeedbackSignal {
             counter += Constants.ChirpGap;
         }
 
-        fbegin=Constants.f_range[0]+(fbegin*Constants.inc);
-        fend=Constants.f_range[0]+(fend*Constants.inc);
+        // Modified: fbegin and fend are now absolute bin numbers
+        fbegin = fbegin * Constants.inc;
+        fend = fend * Constants.inc;
 
         fbegin=Math.round(fbegin/10)*10;
         fend=Math.round(fend/10)*10;
@@ -191,94 +192,48 @@ public class FeedbackSignal {
         return freqs;
     }
 
-    public static int[] decodeFeedbackSignal(double[] feedback_spec_db) {
+    public static int[] decodeFeedbackSignal(double[] smooth_sig) {
+        LinkedList<Bin> allBins = new LinkedList<>();
+        // Frequency resolution: fs / N_fft. Since smooth_sig.length is N_fft (7680), 
+        // and it covers 0..fs, spacing is 48000/7680 = 6.25Hz.
+        double spacing = (double) Constants.fs / smooth_sig.length;
+        
+        // 1. Find peaks ONLY in the first half of the spectrum (0..fs/2) 
+        // and within a sane acoustic range (1000Hz - 8000Hz)
+        int searchLimit = smooth_sig.length / 2;
+        for (int i = 2; i < searchLimit; i++) {
+            double freq = i * spacing;
+            if (freq < 800 || freq > 8000) continue; // Ignore out-of-range noise
 
-        LinkedList<Bin> bins = new LinkedList<>();
-        double[] smooth_sig = feedback_spec_db;
-
-        int feedbackFreqSpacing = Constants.fs/feedback_spec_db.length;
-        int startIdx = Constants.f_range[0]/feedbackFreqSpacing;
-        int endIdx = Constants.f_range[1]/feedbackFreqSpacing;
-
-        for (int i = startIdx; i < endIdx; i++) {
-            int freq = i*feedbackFreqSpacing;
-
-            double signal = smooth_sig[i];
-            double[] noise1 = Utils.segment(smooth_sig,i-5,i-2);
-            double[] noise2 = Utils.segment(smooth_sig,i+2,i+5);
-
-            double val=0;
-            for(Double d : noise1) {
-                val+=d;
-            }
-            for(Double d : noise2) {
-                val+=d;
-            }
-            double noise = val / (noise1.length+noise2.length);
-
-            double snr = signal-noise;
-            double prom = getProm(smooth_sig,i,i-2,i+2);
-
-            if (snr >= Constants.FEEDBACK_SNR_THRESH) {
-                bins.add(new Bin(freq, snr, signal, noise, prom));
+            if (smooth_sig[i] > smooth_sig[i-1] && smooth_sig[i] > smooth_sig[i+1] && 
+                smooth_sig[i] > Constants.FEEDBACK_SNR_THRESH) {
+                double prom = getProm(smooth_sig, i, i - 2, i + 2);
+                allBins.add(new Bin((int)Math.round(freq), smooth_sig[i], smooth_sig[i], 0, prom));
             }
         }
 
-        Collections.sort(bins, new Comparator<Bin>() {
-            @Override
-            public int compare(Bin c1, Bin c2) {
-                double met1 = c1.prom+c1.snr;
-                double met2 = c2.prom+c2.snr;
-                if (met1 > met2) {return 1;}
-                else if (met1 == met2) {return 0;}
-                else {return -1;}
-            }
-        });
+        // 2. Sort by prominence + magnitude
+        Collections.sort(allBins, (b1, b2) -> Double.compare(b2.prom + b2.snr, b1.prom + b1.snr));
 
-        LinkedList<Integer> remove=new LinkedList<>();
-        for (int i = bins.size()-1; i >= 1; i--) {
-            if (Math.abs(bins.get(i).freq - bins.get(i-1).freq)==feedbackFreqSpacing) {
-                if (bins.get(i).snr > bins.get(i-1).snr) {
-                    remove.add(i);
-                }
-                else {
-                    remove.add(i-1);
-                }
-            }
+        // Debug: Log top 5 peaks
+        for (int i = 0; i < Math.min(5, allBins.size()); i++) {
+            Bin b = allBins.get(i);
+            Log.d("ALICE_Handshake", String.format("Peak %d: Freq=%d, Mag=%.2f, Prom=%.2f", i, b.freq, b.snr, b.prom));
         }
 
-        for (Integer i : remove) {
-            bins.remove(bins.get(i));
+        if (allBins.size() >= 2) {
+            // Take the two most prominent peaks
+            int f1 = allBins.get(0).freq;
+            int f2 = allBins.get(1).freq;
+            
+            // Ensure they are ordered correctly
+            int[] result = (f1 < f2) ? new int[]{f1, f2} : new int[]{f2, f1};
+            Log.i("ALICE", "Handshake Decoded Frequencies: " + result[0] + "Hz, " + result[1] + "Hz");
+            return result;
         }
-
-        if (bins.size() >= 2) {
-            int f1 = bins.get(bins.size() - 1).freq;
-            int f2 = bins.get(bins.size() - 2).freq;
-            double s1 = bins.get(bins.size() - 1).snr;
-            double s2 = bins.get(bins.size() - 2).snr;
-
-            Bin nf1 = search(bins, f1 / 2);
-            Bin nf2 = search(bins, f2 / 2);
-            if (nf1 != null && nf1.snr > s1) {
-                f1 = nf1.freq;
-                s1 = nf1.snr;
-            }
-            if (nf2 != null && nf2.snr > s2) {
-                f2 = nf2.freq;
-                s2 = nf2.snr;
-            }
-
-            if (s1 >= Constants.FEEDBACK_SNR_THRESH && s2 >= Constants.FEEDBACK_SNR_THRESH) {
-                if (f1 > f2) {
-                    return new int[]{f2, f1};
-                }
-                return new int[]{f1, f2};
-            }
-        }
-        else if (bins.size() == 1) {
-            return new int[]{bins.get(0).freq,bins.get(0).freq};
-        }
-        return new int[]{-1,-1};
+        
+        if (allBins.size() == 1) return new int[]{allBins.get(0).freq, allBins.get(0).freq};
+        return new int[]{-1, -1};
     }
 
     public static Bin search(LinkedList<Bin> bins, int freq) {
