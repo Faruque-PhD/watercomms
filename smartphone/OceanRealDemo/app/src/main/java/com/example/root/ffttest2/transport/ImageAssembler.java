@@ -93,7 +93,7 @@ public class ImageAssembler {
             byte[] partialData = partialStream.toByteArray();
             try {
                 // For partial reconstruction, we use the simpler decodeByteArray
-                Bitmap partialBitmap = BitmapFactory.decodeByteArray(partialData, 0, partialData.length);
+                Bitmap partialBitmap = BitmapFactory.decodeByteArray(partialData, 0, partialData.length, new BitmapFactory.Options());
                 if (partialBitmap != null) {
                     android.util.Log.d("ImageAssembler", "Partial image reconstructed! Size: " + partialData.length);
                     if (listener != null) {
@@ -130,7 +130,7 @@ public class ImageAssembler {
             }
 
             byte[] fullData = outputStream.toByteArray();
-            Bitmap bitmap = BitmapFactory.decodeByteArray(fullData, 0, fullData.length);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(fullData, 0, fullData.length, new BitmapFactory.Options());
 
             if (bitmap != null) {
                 if (listener != null) listener.onImageComplete(bitmap);

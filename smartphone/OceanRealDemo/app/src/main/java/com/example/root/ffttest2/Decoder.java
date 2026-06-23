@@ -160,9 +160,39 @@ public class Decoder {
 
         // --- IMAGE PACKET DETECTION ---
         try {
-            byte[] decodedBytes = bitsToBytes(uncoded); // Use uncoded bits for image packet
-            Log.d("Decoder", "Decoded bytes length: " + decodedBytes.length);
-            com.example.root.ffttest2.transport.ImagePacket packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+            // First, try to locate the magic header bit-pattern inside the uncoded bitstream.
+            String magic = "0100111101010010"; // 'OR' 16-bit magic
+            String inverted = uncoded.replace('0', 'x').replace('1', '0').replace('x', '1');
+
+            byte[] decodedBytes = null;
+            com.example.root.ffttest2.transport.ImagePacket packet = null;
+
+            // Try likely payload sizes (acoustic=128, optical=32) to be robust
+            int[] possiblePayloads = new int[]{128, 32};
+            for (int payload : possiblePayloads) {
+                int totalPacketBits = (com.example.root.ffttest2.transport.ImagePacket.HEADER_SIZE + payload) * 8;
+                int idx = uncoded.indexOf(magic);
+                int idxInv = inverted.indexOf(magic);
+
+                if (idx != -1 && uncoded.length() >= idx + totalPacketBits) {
+                    String packetBits = uncoded.substring(idx, idx + totalPacketBits);
+                    decodedBytes = bitsToBytes(packetBits);
+                    packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+                    if (packet != null) break;
+                }
+                if (idxInv != -1 && uncoded.length() >= idxInv + totalPacketBits) {
+                    String packetBits = inverted.substring(idxInv, idxInv + totalPacketBits);
+                    decodedBytes = bitsToBytes(packetBits);
+                    packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+                    if (packet != null) break;
+                }
+            }
+
+            // Fallback: try whole stream (legacy behavior)
+            if (packet == null) {
+                decodedBytes = bitsToBytes(uncoded);
+                packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+            }
 
             if (packet != null) {
                 Log.d("BOB", "VALID Image Packet detected! Pkt: " + packet.packetIndex + "/" + packet.totalPackets + " | ID: " + packet.imageId);

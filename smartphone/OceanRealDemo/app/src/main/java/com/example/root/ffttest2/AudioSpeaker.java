@@ -16,11 +16,7 @@ public class AudioSpeaker extends Thread {
     int loops;
     int samplingFreq;
 
-    int[] streams = new int[]{AudioManager.STREAM_MUSIC,
-            AudioManager.STREAM_ACCESSIBILITY, AudioManager.STREAM_ALARM,
-            AudioManager.STREAM_DTMF, AudioManager.STREAM_NOTIFICATION,
-            AudioManager.STREAM_RING, AudioManager.STREAM_SYSTEM,
-            AudioManager.STREAM_VOICE_CALL};
+    int[] streams;
 
     int preamble_length;
     public AudioSpeaker(Context mycontext, short[] samples, int samplingFreq, int loops, int preamble_length, boolean top) {
@@ -32,17 +28,68 @@ public class AudioSpeaker extends Thread {
 
         this.mycontext = mycontext;
         man = (AudioManager)mycontext.getSystemService(Context.AUDIO_SERVICE);
-        for (Integer i : streams) {
-            man.setStreamMute(i, true);
-        }
-        man.setStreamMute(AudioManager.STREAM_MUSIC,false);
-        man.setStreamVolume(AudioManager.STREAM_MUSIC,(int)(man.getStreamMaxVolume(speakerType)),0);
 
-        man.setStreamMute(speakerType, false);
-        man.setStreamVolume(speakerType,(int)(man.getStreamMaxVolume(speakerType)),0);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            streams = new int[]{
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.STREAM_ACCESSIBILITY,
+                    AudioManager.STREAM_ALARM,
+                    AudioManager.STREAM_DTMF,
+                    AudioManager.STREAM_NOTIFICATION,
+                    AudioManager.STREAM_RING,
+                    AudioManager.STREAM_SYSTEM,
+                    AudioManager.STREAM_VOICE_CALL
+            };
+        } else {
+            streams = new int[]{
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.STREAM_ALARM,
+                    AudioManager.STREAM_DTMF,
+                    AudioManager.STREAM_NOTIFICATION,
+                    AudioManager.STREAM_RING,
+                    AudioManager.STREAM_SYSTEM,
+                    AudioManager.STREAM_VOICE_CALL
+            };
+        }
+
+        for (int i : streams) {
+            try {
+                man.adjustStreamVolume(i, AudioManager.ADJUST_MUTE, 0);
+            } catch (Exception e) {
+                Log.e("AudioSpeaker", "Muting stream " + i + " failed: " + e.getMessage());
+            }
+        }
+
+        try {
+            man.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+        } catch (Exception e) {
+            Log.e("AudioSpeaker", "Unmuting music stream failed: " + e.getMessage());
+        }
+
+        try {
+            man.setStreamVolume(AudioManager.STREAM_MUSIC, (int)(man.getStreamMaxVolume(speakerType)), 0);
+        } catch (Exception e) {
+            Log.e("AudioSpeaker", "Setting music volume failed: " + e.getMessage());
+        }
+
+        try {
+            man.adjustStreamVolume(speakerType, AudioManager.ADJUST_UNMUTE, 0);
+        } catch (Exception e) {
+            Log.e("AudioSpeaker", "Unmuting speaker stream failed: " + e.getMessage());
+        }
+
+        try {
+            man.setStreamVolume(speakerType, (int)(man.getStreamMaxVolume(speakerType)), 0);
+        } catch (Exception e) {
+            Log.e("AudioSpeaker", "Setting speaker volume failed: " + e.getMessage());
+        }
 
         write(samples);
-        man.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+        try {
+            man.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+        } catch (Exception e) {
+            Log.e("AudioSpeaker", "Setting ringer mode failed: " + e.getMessage());
+        }
     }
 
     public void write(short[] samples) {
