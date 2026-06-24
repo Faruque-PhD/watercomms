@@ -170,20 +170,32 @@ public class Decoder {
             // Try likely payload sizes (acoustic=128, optical=32) to be robust
             int[] possiblePayloads = new int[]{128, 32};
             for (int payload : possiblePayloads) {
-                int totalPacketBits = (com.example.root.ffttest2.transport.ImagePacket.HEADER_SIZE + payload) * 8;
+                int totalPacketBits = (com.example.root.ffttest2.transport.ImagePacket.HEADER_SIZE + payload + com.example.root.ffttest2.transport.ImagePacket.CRC_SIZE) * 8;
                 int idx = uncoded.indexOf(magic);
                 int idxInv = inverted.indexOf(magic);
 
                 if (idx != -1 && uncoded.length() >= idx + totalPacketBits) {
                     String packetBits = uncoded.substring(idx, idx + totalPacketBits);
                     decodedBytes = bitsToBytes(packetBits);
+                    // Dump candidate to diagnostics
+                    dumpBytes(decodedBytes, "candidate_idx_" + idx + "_payload_" + payload);
                     packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+                    if (packet == null) {
+                        packet = com.example.root.ffttest2.transport.ImagePacket.fromBytesLenient(decodedBytes);
+                        if (packet != null) android.util.Log.w("Decoder", "Packet accepted by lenient parser at idx=" + idx + ", payload=" + payload);
+                    }
                     if (packet != null) break;
                 }
                 if (idxInv != -1 && uncoded.length() >= idxInv + totalPacketBits) {
                     String packetBits = inverted.substring(idxInv, idxInv + totalPacketBits);
                     decodedBytes = bitsToBytes(packetBits);
+                    // Dump inverted candidate to diagnostics
+                    dumpBytes(decodedBytes, "candidate_idxInv_" + idxInv + "_payload_" + payload);
                     packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+                    if (packet == null) {
+                        packet = com.example.root.ffttest2.transport.ImagePacket.fromBytesLenient(decodedBytes);
+                        if (packet != null) android.util.Log.w("Decoder", "Packet accepted by lenient parser (inverted) at idxInv=" + idxInv + ", payload=" + payload);
+                    }
                     if (packet != null) break;
                 }
             }
@@ -191,7 +203,12 @@ public class Decoder {
             // Fallback: try whole stream (legacy behavior)
             if (packet == null) {
                 decodedBytes = bitsToBytes(uncoded);
+                dumpBytes(decodedBytes, "fallback_wholestream");
                 packet = com.example.root.ffttest2.transport.ImagePacket.fromBytes(decodedBytes);
+                if (packet == null) {
+                    packet = com.example.root.ffttest2.transport.ImagePacket.fromBytesLenient(decodedBytes);
+                    if (packet != null) android.util.Log.w("Decoder", "Packet accepted by lenient parser (fallback whole stream)");
+                }
             }
 
             if (packet != null) {
@@ -235,6 +252,21 @@ public class Decoder {
 
         Utils.log(coded + " => " + uncoded + " => " + sigName);
         return false;
+    }
+
+    private static void dumpBytes(byte[] data, String name) {
+        if (data == null) return;
+        try {
+            java.io.File dir = new java.io.File("/storage/emulated/0/Android/data/com.example.root.ffttest2/files/diagnostics");
+            if (!dir.exists()) dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "rcv_" + name + "_" + System.currentTimeMillis() + ".bin");
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+            fos.write(data);
+            fos.close();
+            android.util.Log.d("Decoder", "Wrote diagnostic file: " + f.getAbsolutePath());
+        } catch (Exception e) {
+            android.util.Log.d("Decoder", "Failed to write diag: " + e.getMessage());
+        }
     }
 
     private static byte[] bitsToBytes(String bits) {

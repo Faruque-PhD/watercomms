@@ -63,12 +63,7 @@ public class ImageAssembler {
         }
 
         // --- ENHANCED: Resilient Partial Reconstruction ---
-        // We MUST have the first packet because it contains the image header (Magic, etc.)
-        if (packetBuffer.get(0) == null) {
-            android.util.Log.w("ImageAssembler", "Packet 0 missing, skipping partial reconstruction");
-            return;
-        }
-
+        // Attempt partial reconstruction even if packet 0 is missing by searching for image file signatures
         ByteArrayOutputStream partialStream = new ByteArrayOutputStream();
         int payloadSize = packet.payload.length;
         
@@ -92,12 +87,28 @@ public class ImageAssembler {
         if (partialStream.size() > 0) {
             byte[] partialData = partialStream.toByteArray();
             try {
-                // For partial reconstruction, we use the simpler decodeByteArray
+                // First try naive decode of the whole buffer
                 Bitmap partialBitmap = BitmapFactory.decodeByteArray(partialData, 0, partialData.length, new BitmapFactory.Options());
                 if (partialBitmap != null) {
-                    android.util.Log.d("ImageAssembler", "Partial image reconstructed! Size: " + partialData.length);
-                    if (listener != null) {
-                        listener.onPartialImageReconstructed(partialBitmap);
+                    android.util.Log.d("ImageAssembler", "Partial image reconstructed (direct)! Size: " + partialData.length);
+                    if (listener != null) listener.onPartialImageReconstructed(partialBitmap);
+                } else {
+                    // If direct decode fails, try searching for common image file signatures inside the stream
+                    int startIdx = findImageStartOffset(partialData);
+                    if (startIdx >= 0 && startIdx < partialData.length - 16) {
+                        try {
+                            Bitmap partialBitmap2 = BitmapFactory.decodeByteArray(partialData, startIdx, partialData.length - startIdx, new BitmapFactory.Options());
+                            if (partialBitmap2 != null) {
+                                android.util.Log.d("ImageAssembler", "Partial image reconstructed (found header at " + startIdx + ")");
+                                if (listener != null) listener.onPartialImageReconstructed(partialBitmap2);
+                            } else {
+                                android.util.Log.v("ImageAssembler", "Partial decode after header search failed at offset: " + startIdx);
+                            }
+                        } catch (Exception e) {
+                            android.util.Log.v("ImageAssembler", "Partial decode exception after header search: " + e.getMessage());
+                        }
+                    } else {
+                        android.util.Log.v("ImageAssembler", "No image header found in partial buffer (size=" + partialData.length + ")");
                     }
                 }
             } catch (Exception e) {
@@ -151,4 +162,34 @@ public class ImageAssembler {
         if (totalPackets <= 0) return 0;
         return (int) ((packetBuffer.size() / (double) totalPackets) * 100);
     }
+
+    private int findImageStartOffset(byte[] data) {
+        // Search for WebP RIFF/WEBP header
+        byte[] riff = new byte[]{0x52,0x49,0x46,0x46}; // 'RIFF'
+        byte[] webp = new byte[]{0x57,0x45,0x42,0x50}; // 'WEBP'
+        for (int i = 0; i < data.length - 12; i++) {
+            boolean isRiff = true;
+            for (int j = 0; j < riff.length; j++) {
+                if (data[i+j] != riff[j]) { isRiff = false; break; }
+            }
+            if (isRiff) {
+                // check for 'WEBP' at offset i+8
+                boolean isWebp = true;
+                for (int j = 0; j < webp.length; j++) {
+                    if (i+8+j >= data.length || data[i+8+j] != webp[j]) { isWebp = false; break; }
+                }
+                if (isWebp) return i;
+            }
+        }
+
+        // Search for JPEG SOI marker 0xFF 0xD8 0xFF
+        for (int i = 0; i < data.length - 3; i++) {
+            if ((data[i] & 0xFF) == 0xFF && (data[i+1] & 0xFF) == 0xD8) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 }
+

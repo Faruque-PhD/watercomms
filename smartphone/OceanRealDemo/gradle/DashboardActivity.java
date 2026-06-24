@@ -499,7 +499,7 @@ public class DashboardActivity extends AppCompatActivity implements ImageAssembl
 
                         if (idx != -1) {
                             int payloadSize = isAcoustic ? 128 : 32;
-                            int totalPacketBits = (ImagePacket.HEADER_SIZE + payloadSize) * 8;
+                            int totalPacketBits = (ImagePacket.HEADER_SIZE + payloadSize + ImagePacket.CRC_SIZE) * 8;
                             
                             if (bitStream.length() >= idx + totalPacketBits) {
                                 String packetBits = bitStream.substring(idx, idx + totalPacketBits);
