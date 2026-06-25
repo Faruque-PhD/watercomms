@@ -74,10 +74,10 @@ public class ImagePacket implements Serializable {
     public static ImagePacket fromBytes(byte[] data) {
         if (data.length < HEADER_SIZE + CRC_SIZE) return null;
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        
+
         byte m1 = buffer.get();
         byte m2 = buffer.get();
-        
+
         // Robust check: Allow some bit errors due to noisy channels, but don't reject immediately.
         int diff1 = countSetBits((byte)(m1 ^ MAGIC_1));
         int diff2 = countSetBits((byte)(m2 ^ MAGIC_2));
@@ -89,7 +89,7 @@ public class ImagePacket implements Serializable {
         packet.imageId = buffer.getShort() & 0xFFFF;
         packet.packetIndex = buffer.getShort() & 0xFFFF;
         packet.totalPackets = buffer.getShort() & 0xFFFF;
-        
+
         int payloadLen = data.length - HEADER_SIZE - CRC_SIZE;
         if (payloadLen < 0) return null;
         packet.payload = new byte[payloadLen];
@@ -151,7 +151,6 @@ public class ImagePacket implements Serializable {
         } catch (Exception e) {
             return null;
         }
-    }
     }
 
     private static int countSetBits(byte n) {
